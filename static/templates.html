@@ -1,0 +1,2000 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Script Duniya | Production AI Pipeline</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --bg-void:        #0a0b0d;
+            --bg-deep:        #0f1115;
+            --bg-surface:     #161820;
+            --bg-raised:      #1e2028;
+            --bg-float:       #252830;
+            --border-dim:     rgba(255,255,255,0.06);
+            --border-soft:    rgba(255,255,255,0.10);
+            --border-glow:    rgba(212,175,55,0.30);
+
+            --gold:           #d4af37;
+            --gold-bright:    #f5cc4a;
+            --gold-dim:       rgba(212,175,55,0.15);
+            --gold-glow:      rgba(212,175,55,0.06);
+
+            --amber:          #e8943a;
+            --amber-dim:      rgba(232,148,58,0.15);
+
+            --text-primary:   #f0ece4;
+            --text-secondary: #9a9590;
+            --text-muted:     #5a5650;
+            --text-gold:      #d4af37;
+
+            --red:            #e05252;
+            --green:          #52c97e;
+            --green-dim:      rgba(82,201,126,0.15);
+
+            --ff-display:     'Bebas Neue', sans-serif;
+            --ff-serif:       'Libre Baskerville', serif;
+            --ff-mono:        'DM Mono', monospace;
+            --ff-body:        'DM Sans', sans-serif;
+
+            --radius-sm:      8px;
+            --radius-md:      14px;
+            --radius-lg:      20px;
+            --radius-xl:      28px;
+
+            --shadow-gold:    0 0 40px rgba(212,175,55,0.12), 0 4px 24px rgba(0,0,0,0.6);
+            --shadow-card:    0 8px 40px rgba(0,0,0,0.5), 0 1px 0 rgba(255,255,255,0.04) inset;
+            --shadow-deep:    0 24px 80px rgba(0,0,0,0.8);
+        }
+
+        html { scroll-behavior: smooth; }
+
+        body {
+            font-family: var(--ff-body);
+            background-color: var(--bg-void);
+            color: var(--text-primary);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* ── FILM GRAIN OVERLAY ── */
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+            background-size: 128px 128px;
+            pointer-events: none;
+            z-index: 1000;
+            opacity: 0.6;
+        }
+
+        /* ── GRID PATTERN ── */
+        body::after {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background-image:
+                linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px);
+            background-size: 48px 48px;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        /* ── SCROLLBAR ── */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: var(--bg-void); }
+        ::-webkit-scrollbar-thumb { background: var(--bg-float); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+        /* ── SELECTION ── */
+        ::selection { background: rgba(212,175,55,0.3); color: var(--gold-bright); }
+
+        /* ── UTILITY ── */
+        .hidden { display: none !important; }
+
+        /* ──────────────────────────────
+            AUTH OVERLAY
+        ────────────────────────────── */
+        #auth-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.85);
+            backdrop-filter: blur(20px) saturate(0.5);
+            z-index: 200;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            animation: fadeIn 0.4s ease;
+        }
+
+        .auth-panel {
+            position: relative;
+            width: 100%;
+            max-width: 420px;
+            margin: 16px;
+            background: var(--bg-surface);
+            border: 1px solid var(--border-soft);
+            border-radius: var(--radius-xl);
+            padding: 48px 40px;
+            box-shadow: var(--shadow-deep), 0 0 80px rgba(212,175,55,0.08);
+            animation: slideUp 0.5s cubic-bezier(0.16,1,0.3,1);
+            overflow: hidden;
+        }
+
+        .auth-panel::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--gold), var(--amber), transparent);
+        }
+
+        .auth-panel::after {
+            content: '';
+            position: absolute;
+            top: -120px; left: -120px;
+            width: 280px; height: 280px;
+            background: radial-gradient(circle, rgba(212,175,55,0.08) 0%, transparent 70%);
+            pointer-events: none;
+        }
+
+        .auth-logo {
+            width: 52px; height: 52px;
+            background: linear-gradient(135deg, var(--gold) 0%, var(--amber) 100%);
+            border-radius: var(--radius-md);
+            display: flex; align-items: center; justify-content: center;
+            margin: 0 auto 20px;
+            box-shadow: 0 4px 20px rgba(212,175,55,0.3);
+        }
+
+        .auth-logo svg { width: 24px; height: 24px; color: var(--bg-void); stroke: var(--bg-void); }
+
+        .auth-panel h2 {
+            font-family: var(--ff-display);
+            font-size: 2.4rem;
+            letter-spacing: 0.05em;
+            text-align: center;
+            color: var(--text-primary);
+            line-height: 1;
+            margin-bottom: 8px;
+        }
+
+        .auth-panel .subtitle {
+            font-size: 0.8rem;
+            font-weight: 400;
+            color: var(--text-secondary);
+            text-align: center;
+            letter-spacing: 0.04em;
+            margin-bottom: 36px;
+        }
+
+        .field-group { margin-bottom: 18px; }
+
+        .field-group label {
+            display: block;
+            font-size: 0.65rem;
+            font-weight: 500;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+        }
+
+        .field-group input {
+            width: 100%;
+            padding: 13px 16px;
+            background: var(--bg-deep);
+            border: 1px solid var(--border-soft);
+            border-radius: var(--radius-sm);
+            font-family: var(--ff-body);
+            font-size: 0.9rem;
+            color: var(--text-primary);
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        .field-group input:focus {
+            border-color: var(--gold);
+            box-shadow: 0 0 0 3px rgba(212,175,55,0.12);
+        }
+
+        .field-group input::placeholder { color: var(--text-muted); }
+
+        .btn-primary {
+            width: 100%;
+            margin-top: 28px;
+            padding: 15px;
+            background: linear-gradient(135deg, var(--gold) 0%, var(--amber) 100%);
+            color: var(--bg-void);
+            font-family: var(--ff-display);
+            font-size: 1.1rem;
+            letter-spacing: 0.1em;
+            border: none;
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            transition: transform 0.15s, box-shadow 0.15s, filter 0.15s;
+            box-shadow: 0 4px 20px rgba(212,175,55,0.3);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .btn-primary::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(rgba(255,255,255,0.15), transparent);
+            pointer-events: none;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 30px rgba(212,175,55,0.45);
+            filter: brightness(1.05);
+        }
+
+        .btn-primary:active { transform: translateY(0); }
+
+        .auth-toggle {
+            text-align: center;
+            margin-top: 24px;
+            font-size: 0.82rem;
+            color: var(--text-secondary);
+        }
+
+        .auth-toggle button {
+            background: none; border: none;
+            color: var(--gold);
+            font-weight: 600;
+            cursor: pointer;
+            transition: color 0.2s;
+            padding: 0;
+        }
+        .auth-toggle button:hover { color: var(--gold-bright); }
+
+        /* ──────────────────────────────
+            HEADER
+        ────────────────────────────── */
+        header {
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            background: rgba(10,11,13,0.85);
+            backdrop-filter: blur(20px) saturate(1.5);
+            border-bottom: 1px solid var(--border-dim);
+        }
+
+        .header-inner {
+            max-width: 1320px;
+            margin: 0 auto;
+            padding: 0 28px;
+            height: 64px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .logo-mark {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .logo-icon {
+            width: 36px; height: 36px;
+            background: linear-gradient(135deg, var(--gold) 0%, var(--amber) 100%);
+            border-radius: 10px;
+            display: flex; align-items: center; justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .logo-icon svg { width: 18px; height: 18px; stroke: var(--bg-void); }
+
+        .logo-text { line-height: 1; }
+        .logo-name {
+            font-family: var(--ff-display);
+            font-size: 1.25rem;
+            letter-spacing: 0.08em;
+            color: var(--text-primary);
+        }
+        .logo-tagline {
+            font-size: 0.55rem;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            color: var(--gold);
+            font-weight: 500;
+            margin-top: 2px;
+        }
+
+        .stepper {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .step-item {
+            font-size: 0.72rem;
+            font-weight: 500;
+            letter-spacing: 0.06em;
+            padding: 5px 12px;
+            border-radius: 20px;
+            color: var(--text-muted);
+            transition: all 0.3s;
+            white-space: nowrap;
+        }
+
+        .step-item.active {
+            background: var(--gold-dim);
+            color: var(--gold);
+            border: 1px solid rgba(212,175,55,0.25);
+            font-weight: 600;
+        }
+
+        .step-item.done { color: var(--text-secondary); }
+        .step-sep { color: var(--text-muted); font-size: 0.7rem; }
+
+        .btn-logout {
+            display: flex; align-items: center; gap: 6px;
+            font-size: 0.8rem; font-weight: 500;
+            color: var(--text-secondary);
+            background: var(--bg-raised);
+            border: 1px solid var(--border-dim);
+            border-radius: var(--radius-sm);
+            padding: 7px 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-logout:hover { color: var(--text-primary); border-color: var(--border-soft); }
+        .btn-logout svg { width: 14px; height: 14px; stroke: currentColor; }
+
+        /* ──────────────────────────────
+            TOAST
+        ────────────────────────────── */
+        #toast-container {
+            position: fixed;
+            bottom: 24px; right: 24px;
+            z-index: 500;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .toast {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 13px 18px;
+            border-radius: var(--radius-sm);
+            font-size: 0.85rem;
+            font-weight: 500;
+            backdrop-filter: blur(16px);
+            animation: slideUp 0.3s ease;
+            max-width: 360px;
+        }
+
+        .toast.info    { background: var(--bg-float); border: 1px solid var(--border-soft); color: var(--text-primary); }
+        .toast.error   { background: rgba(224,82,82,0.15); border: 1px solid rgba(224,82,82,0.3); color: #ff8c8c; }
+        .toast.success { background: rgba(82,201,126,0.12); border: 1px solid rgba(82,201,126,0.3); color: #7de0a8; }
+        .toast svg { width: 16px; height: 16px; stroke: currentColor; flex-shrink: 0; }
+
+        /* ──────────────────────────────
+            MAIN LAYOUT
+        ────────────────────────────── */
+        main {
+            flex-grow: 1;
+            max-width: 1320px;
+            margin: 0 auto;
+            width: 100%;
+            padding: 60px 28px;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* ──────────────────────────────
+            INPUT SECTION
+        ────────────────────────────── */
+        #input-section {
+            max-width: 860px;
+            margin: 0 auto;
+            animation: fadeInUp 0.6s cubic-bezier(0.16,1,0.3,1);
+        }
+
+        .section-headline {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .section-eyebrow {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.65rem;
+            font-weight: 500;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            color: var(--gold);
+            background: var(--gold-dim);
+            border: 1px solid rgba(212,175,55,0.2);
+            padding: 5px 14px;
+            border-radius: 20px;
+            margin-bottom: 16px;
+        }
+
+        .section-eyebrow span.dot {
+            width: 5px; height: 5px;
+            background: var(--gold);
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        .section-title {
+            font-family: var(--ff-display);
+            font-size: 3.2rem;
+            letter-spacing: 0.04em;
+            color: var(--text-primary);
+            line-height: 1;
+            margin-bottom: 12px;
+        }
+
+        .section-desc {
+            font-size: 0.9rem;
+            font-weight: 300;
+            color: var(--text-secondary);
+            line-height: 1.7;
+        }
+
+        /* ── EDITOR CARD ── */
+        .editor-card {
+            background: var(--bg-surface);
+            border: 1px solid var(--border-soft);
+            border-radius: var(--radius-xl);
+            overflow: hidden;
+            box-shadow: var(--shadow-card);
+            position: relative;
+        }
+
+        .editor-card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, transparent 0%, var(--gold) 30%, var(--amber) 70%, transparent 100%);
+            z-index: 1;
+        }
+
+        .editor-topbar {
+            background: var(--bg-raised);
+            border-bottom: 1px solid var(--border-dim);
+            padding: 12px 20px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .traffic-lights { display: flex; gap: 6px; }
+        .tl { width: 11px; height: 11px; border-radius: 50%; }
+        .tl-r { background: #ff5f57; }
+        .tl-y { background: #febc2e; }
+        .tl-g { background: #28c840; }
+
+        .editor-filename {
+            font-family: var(--ff-mono);
+            font-size: 0.72rem;
+            color: var(--text-muted);
+            letter-spacing: 0.08em;
+            flex: 1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 400px;
+            transition: color 0.3s;
+        }
+
+        .editor-filename.has-file { color: var(--text-secondary); }
+
+        .editor-badge {
+            font-family: var(--ff-mono);
+            font-size: 0.6rem;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: var(--gold);
+            background: var(--gold-dim);
+            border: 1px solid rgba(212,175,55,0.2);
+            padding: 3px 8px;
+            border-radius: 4px;
+        }
+
+        /* ── UPLOAD ZONE ── */
+        .upload-zone {
+            position: relative;
+            margin: 8px;
+            border-radius: 14px;
+            border: 1.5px dashed var(--border-soft);
+            background: var(--bg-deep);
+            transition: border-color 0.25s, background 0.25s, box-shadow 0.25s;
+            cursor: pointer;
+            min-height: 300px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        .upload-zone:hover {
+            border-color: rgba(212,175,55,0.4);
+            background: rgba(212,175,55,0.02);
+            box-shadow: inset 0 0 40px rgba(212,175,55,0.03);
+        }
+
+        .upload-zone.drag-over {
+            border-color: var(--gold);
+            background: rgba(212,175,55,0.05);
+            box-shadow: inset 0 0 60px rgba(212,175,55,0.08), 0 0 0 1px rgba(212,175,55,0.2);
+        }
+
+        .upload-zone input[type="file"] {
+            position: absolute;
+            inset: 0;
+            opacity: 0;
+            cursor: pointer;
+            width: 100%;
+            height: 100%;
+            z-index: 2;
+        }
+
+        /* ── IDLE STATE ── */
+        .upload-idle {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 20px;
+            padding: 52px 32px;
+            text-align: center;
+            pointer-events: none;
+            transition: opacity 0.3s;
+        }
+
+        .upload-icon-wrap {
+            width: 80px; height: 80px;
+            border-radius: 22px;
+            background: var(--bg-raised);
+            border: 1px solid var(--border-soft);
+            display: flex; align-items: center; justify-content: center;
+            transition: transform 0.3s, box-shadow 0.3s, border-color 0.3s;
+            position: relative;
+        }
+
+        .upload-icon-wrap::after {
+            content: '';
+            position: absolute;
+            inset: -1px;
+            border-radius: inherit;
+            background: linear-gradient(135deg, rgba(212,175,55,0.2), transparent 60%);
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .upload-zone:hover .upload-icon-wrap {
+            transform: translateY(-6px);
+            box-shadow: 0 16px 40px rgba(212,175,55,0.18);
+            border-color: rgba(212,175,55,0.3);
+        }
+
+        .upload-zone:hover .upload-icon-wrap::after { opacity: 1; }
+
+        .upload-icon-wrap svg {
+            width: 32px; height: 32px;
+            stroke: var(--gold);
+            transition: transform 0.3s;
+        }
+
+        .upload-zone:hover .upload-icon-wrap svg { transform: translateY(-2px); }
+
+        .upload-label-main {
+            font-family: var(--ff-display);
+            font-size: 1.8rem;
+            letter-spacing: 0.06em;
+            color: var(--text-primary);
+            line-height: 1;
+        }
+
+        .upload-label-sub {
+            font-size: 0.82rem;
+            color: var(--text-secondary);
+            font-weight: 300;
+            line-height: 1.7;
+            max-width: 380px;
+        }
+
+        .upload-formats {
+            display: flex;
+            gap: 8px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .fmt-chip {
+            font-family: var(--ff-mono);
+            font-size: 0.65rem;
+            letter-spacing: 0.1em;
+            color: var(--text-muted);
+            background: var(--bg-float);
+            border: 1px solid var(--border-dim);
+            padding: 5px 12px;
+            border-radius: 6px;
+        }
+
+        /* ── SELECTED STATE ── */
+        .upload-selected {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            gap: 18px;
+            padding: 52px 32px;
+            text-align: center;
+        }
+
+        .upload-selected.visible { display: flex; }
+        .upload-idle.hidden-state { display: none; }
+
+        .file-card {
+            display: flex;
+            align-items: center;
+            gap: 18px;
+            background: var(--bg-raised);
+            border: 1px solid rgba(212,175,55,0.2);
+            border-radius: var(--radius-md);
+            padding: 18px 24px;
+            width: 100%;
+            max-width: 440px;
+            pointer-events: none;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .file-card::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg, rgba(212,175,55,0.05) 0%, transparent 60%);
+        }
+
+        .file-type-icon {
+            width: 52px; height: 52px;
+            border-radius: 12px;
+            display: flex; align-items: center; justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .file-type-icon.pdf {
+            background: rgba(224, 82, 82, 0.15);
+            border: 1px solid rgba(224, 82, 82, 0.3);
+        }
+
+        .file-type-icon.docx {
+            background: rgba(82, 130, 224, 0.15);
+            border: 1px solid rgba(82, 130, 224, 0.3);
+        }
+
+        .file-type-icon svg { width: 24px; height: 24px; }
+        .file-type-icon.pdf svg { stroke: #e05252; }
+        .file-type-icon.docx svg { stroke: #5282e0; }
+
+        .file-card-info { flex: 1; text-align: left; min-width: 0; }
+
+        .file-name-display {
+            font-family: var(--ff-mono);
+            font-size: 0.85rem;
+            color: var(--text-primary);
+            font-weight: 500;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            margin-bottom: 4px;
+        }
+
+        .file-meta-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .file-size-display {
+            font-size: 0.72rem;
+            color: var(--text-secondary);
+            font-family: var(--ff-mono);
+        }
+
+        .file-ready-badge {
+            font-size: 0.6rem;
+            font-weight: 600;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: var(--green);
+            background: var(--green-dim);
+            border: 1px solid rgba(82,201,126,0.2);
+            padding: 2px 8px;
+            border-radius: 4px;
+        }
+
+        .file-check-icon {
+            width: 28px; height: 28px;
+            border-radius: 50%;
+            background: var(--green-dim);
+            border: 1px solid rgba(82,201,126,0.3);
+            display: flex; align-items: center; justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .file-check-icon svg { width: 14px; height: 14px; stroke: var(--green); }
+
+        .file-change-btn {
+            font-size: 0.75rem;
+            font-weight: 500;
+            color: var(--text-muted);
+            background: var(--bg-float);
+            border: 1px solid var(--border-dim);
+            padding: 7px 16px;
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            transition: color 0.2s, border-color 0.2s, background 0.2s;
+            z-index: 3;
+            position: relative;
+            pointer-events: all;
+        }
+
+        .file-change-btn:hover {
+            color: var(--text-primary);
+            border-color: var(--border-soft);
+            background: var(--bg-raised);
+        }
+
+        /* ── PROGRESS BAR ── */
+        .upload-progress {
+            position: absolute;
+            bottom: 0; left: 0; right: 0;
+            height: 3px;
+            background: var(--border-dim);
+            overflow: hidden;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .upload-progress.active { opacity: 1; }
+
+        .upload-progress-bar {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, var(--gold), var(--amber));
+            transition: width 0.4s ease;
+        }
+
+        /* ── DRAG OVERLAY ── */
+        .drag-hint {
+            position: absolute;
+            inset: 0;
+            background: rgba(212,175,55,0.06);
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s;
+            z-index: 3;
+        }
+
+        .drag-hint.visible { opacity: 1; }
+
+        .drag-hint-inner {
+            font-family: var(--ff-display);
+            font-size: 2rem;
+            letter-spacing: 0.1em;
+            color: var(--gold);
+            text-align: center;
+        }
+
+        .drag-hint-inner small {
+            display: block;
+            font-family: var(--ff-body);
+            font-size: 0.85rem;
+            font-weight: 300;
+            color: var(--text-secondary);
+            letter-spacing: 0.02em;
+            margin-top: 6px;
+        }
+
+        /* ── EDITOR FOOTER ── */
+        .editor-footer {
+            background: var(--bg-raised);
+            border-top: 1px solid var(--border-dim);
+            padding: 16px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .footer-meta {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        .footer-meta svg { width: 13px; height: 13px; stroke: var(--gold); }
+
+        .btn-launch {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 13px 28px;
+            background: linear-gradient(135deg, var(--gold) 0%, var(--amber) 100%);
+            color: var(--bg-void);
+            font-family: var(--ff-display);
+            font-size: 1rem;
+            letter-spacing: 0.1em;
+            border: none;
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s, filter 0.2s, opacity 0.2s;
+            box-shadow: 0 4px 20px rgba(212,175,55,0.3);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .btn-launch::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(rgba(255,255,255,0.12), transparent);
+            pointer-events: none;
+        }
+
+        .btn-launch:not(:disabled):hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 35px rgba(212,175,55,0.5);
+            filter: brightness(1.05);
+        }
+
+        .btn-launch:not(:disabled):active { transform: translateY(0); }
+
+        .btn-launch:disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
+        }
+
+        .btn-launch .arrow { transition: transform 0.2s; }
+        .btn-launch:not(:disabled):hover .arrow { transform: translateX(4px); }
+
+        /* ──────────────────────────────
+            LOADING SECTION
+        ────────────────────────────── */
+        #loading {
+            max-width: 520px;
+            margin: 80px auto 0;
+            animation: fadeInUp 0.5s ease;
+        }
+
+        .loading-card {
+            background: var(--bg-surface);
+            border: 1px solid var(--border-soft);
+            border-radius: var(--radius-xl);
+            padding: 56px 40px;
+            text-align: center;
+            box-shadow: var(--shadow-card);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .loading-card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--gold), transparent);
+            animation: shimmer 2s linear infinite;
+            background-size: 200% 100%;
+        }
+
+        .loading-card::after {
+            content: '';
+            position: absolute;
+            bottom: -80px; right: -80px;
+            width: 240px; height: 240px;
+            background: radial-gradient(circle, rgba(212,175,55,0.06), transparent 70%);
+            pointer-events: none;
+        }
+
+        .spinner-wrap {
+            position: relative;
+            width: 84px; height: 84px;
+            margin: 0 auto 32px;
+        }
+
+        .spinner-ring {
+            position: absolute;
+            inset: 0;
+            border-radius: 50%;
+        }
+
+        .ring-outer { border: 2px solid rgba(212,175,55,0.12); }
+
+        .ring-spin {
+            border: 2px solid transparent;
+            border-top-color: var(--gold);
+            border-right-color: rgba(212,175,55,0.4);
+            animation: spin 1.2s linear infinite;
+        }
+
+        .ring-inner {
+            inset: 14px;
+            border: 1.5px solid transparent;
+            border-bottom-color: var(--amber);
+            border-left-color: rgba(232,148,58,0.3);
+            animation: spin 0.8s linear infinite reverse;
+        }
+
+        .spinner-core {
+            position: absolute;
+            inset: 28px;
+            background: var(--gold-dim);
+            border-radius: 50%;
+            border: 1px solid rgba(212,175,55,0.2);
+            display: flex; align-items: center; justify-content: center;
+        }
+
+        .spinner-core svg { width: 13px; height: 13px; stroke: var(--gold); }
+
+        .loading-title {
+            font-family: var(--ff-display);
+            font-size: 2.2rem;
+            letter-spacing: 0.06em;
+            color: var(--text-primary);
+            margin-bottom: 14px;
+        }
+
+        .loading-phase {
+            display: inline-block;
+            font-family: var(--ff-mono);
+            font-size: 0.75rem;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: var(--gold);
+            background: var(--gold-dim);
+            border: 1px solid rgba(212,175,55,0.2);
+            padding: 6px 16px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+
+        .loading-note {
+            font-size: 0.82rem;
+            color: var(--text-muted);
+            line-height: 1.7;
+            font-weight: 300;
+        }
+
+        /* ──────────────────────────────
+            STORYBOARD SECTION
+        ────────────────────────────── */
+        #storyboard-section { animation: fadeInUp 0.6s ease; }
+
+        .sb-header {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            padding-bottom: 40px;
+            border-bottom: 1px solid var(--border-dim);
+            margin-bottom: 60px;
+        }
+
+        @media (min-width: 768px) {
+            .sb-header { flex-direction: row; align-items: flex-end; justify-content: space-between; }
+        }
+
+        .status-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            font-size: 0.65rem;
+            font-weight: 500;
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            color: #52c97e;
+            background: rgba(82,201,126,0.1);
+            border: 1px solid rgba(82,201,126,0.2);
+            padding: 5px 12px;
+            border-radius: 20px;
+            margin-bottom: 12px;
+        }
+
+        .status-pill span {
+            width: 5px; height: 5px;
+            background: var(--green);
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        .sb-title {
+            font-family: var(--ff-display);
+            font-size: 3.4rem;
+            letter-spacing: 0.04em;
+            color: var(--text-primary);
+            line-height: 1;
+            margin-bottom: 16px;
+        }
+
+        .sb-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .meta-chip {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            font-size: 0.78rem;
+            font-weight: 500;
+            color: var(--text-secondary);
+            background: var(--bg-surface);
+            border: 1px solid var(--border-dim);
+            padding: 7px 14px;
+            border-radius: var(--radius-sm);
+        }
+
+        .meta-chip svg { width: 13px; height: 13px; stroke: var(--gold); }
+
+        .btn-reset {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 22px;
+            background: var(--bg-raised);
+            border: 1px solid var(--border-soft);
+            border-radius: var(--radius-sm);
+            color: var(--text-primary);
+            font-size: 0.85rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+        .btn-reset:hover { border-color: rgba(212,175,55,0.3); color: var(--gold); }
+        .btn-reset svg { width: 15px; height: 15px; stroke: currentColor; }
+
+        /* ── SCENE CARD ── */
+        .scene-card {
+            background: var(--bg-surface);
+            border: 1px solid var(--border-dim);
+            border-radius: var(--radius-xl);
+            overflow: hidden;
+            box-shadow: var(--shadow-card);
+            margin-bottom: 48px;
+            transition: border-color 0.3s;
+        }
+
+        .scene-card:hover { border-color: rgba(212,175,55,0.15); }
+
+        .scene-head {
+            background: var(--bg-void);
+            padding: 20px 28px;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 16px;
+            border-bottom: 1px solid var(--border-dim);
+            position: relative;
+        }
+
+        .scene-head::after {
+            content: '';
+            position: absolute;
+            bottom: 0; left: 28px; right: 28px;
+            height: 1px;
+            background: linear-gradient(90deg, var(--gold-dim), transparent);
+        }
+
+        .scene-num {
+            font-family: var(--ff-display);
+            font-size: 0.9rem;
+            letter-spacing: 0.12em;
+            color: var(--bg-void);
+            background: linear-gradient(135deg, var(--gold), var(--amber));
+            padding: 6px 14px;
+            border-radius: 6px;
+            white-space: nowrap;
+            box-shadow: 0 2px 10px rgba(212,175,55,0.3);
+        }
+
+        .scene-heading-text {
+            font-family: var(--ff-mono);
+            font-size: 0.95rem;
+            font-weight: 500;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: var(--text-primary);
+            flex: 1;
+            min-width: 200px;
+        }
+
+        .scene-tod {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-family: var(--ff-mono);
+            font-size: 0.72rem;
+            color: var(--text-muted);
+            letter-spacing: 0.08em;
+        }
+
+        .scene-tod svg { width: 12px; height: 12px; stroke: var(--text-muted); }
+
+        .scene-summary {
+            padding: 22px 28px;
+            background: var(--bg-raised);
+            border-bottom: 1px solid var(--border-dim);
+        }
+
+        .scene-summary p {
+            font-family: var(--ff-serif);
+            font-size: 0.9rem;
+            font-style: italic;
+            color: var(--text-secondary);
+            line-height: 1.8;
+            border-left: 2px solid var(--gold);
+            padding-left: 16px;
+        }
+
+        /* ── FRAME GRID ── */
+        .subscene-grid {
+            padding: 28px;
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 28px;
+        }
+
+        .subscene-item {
+            display: flex;
+            flex-direction: column;
+            cursor: pointer;
+            border-radius: var(--radius-lg);
+            overflow: hidden;
+            border: 1px solid var(--border-dim);
+            transition: border-color 0.3s, box-shadow 0.3s, transform 0.3s;
+        }
+
+        .subscene-item:hover {
+            border-color: rgba(212,175,55,0.3);
+            box-shadow: 0 12px 40px rgba(0,0,0,0.4), 0 0 0 1px rgba(212,175,55,0.1);
+            transform: translateY(-3px);
+        }
+
+        .img-frame {
+            position: relative;
+            aspect-ratio: 16 / 9;
+            background: var(--bg-deep);
+            overflow: hidden;
+        }
+
+        .img-frame img {
+            width: 100%; height: 100%;
+            object-fit: cover;
+            transition: transform 0.6s ease;
+            display: block;
+        }
+
+        .subscene-item:hover .img-frame img { transform: scale(1.05); }
+
+        .img-placeholder {
+            width: 100%; height: 100%;
+            display: flex; align-items: center; justify-content: center;
+            background: var(--bg-raised);
+            color: var(--text-muted);
+            font-family: var(--ff-mono);
+            font-size: 0.65rem;
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .img-placeholder svg { width: 24px; height: 24px; stroke: currentColor; opacity: 0.4; }
+
+        .cam-badge {
+            position: absolute;
+            top: 10px; left: 10px;
+            font-family: var(--ff-mono);
+            font-size: 0.62rem;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: var(--text-primary);
+            background: rgba(0,0,0,0.72);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255,255,255,0.12);
+            padding: 4px 9px;
+            border-radius: 5px;
+        }
+
+        .img-overlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(212,175,55,0);
+            display: flex; align-items: center; justify-content: center;
+            transition: background 0.3s;
+        }
+
+        .subscene-item:hover .img-overlay { background: rgba(212,175,55,0.08); }
+
+        .img-overlay svg {
+            width: 32px; height: 32px;
+            stroke: white;
+            opacity: 0;
+            transform: scale(0.7);
+            transition: opacity 0.3s, transform 0.3s;
+        }
+
+        .subscene-item:hover .img-overlay svg { opacity: 1; transform: scale(1); }
+
+        .subscene-body {
+            padding: 16px 18px;
+            background: var(--bg-raised);
+            display: flex;
+            gap: 12px;
+            align-items: flex-start;
+            flex: 1;
+        }
+
+        .sub-num {
+            min-width: 36px;
+            background: var(--bg-float);
+            border: 1px solid var(--border-dim);
+            border-radius: 6px;
+            display: flex; align-items: center; justify-content: center;
+            font-family: var(--ff-mono);
+            font-size: 0.6rem;
+            color: var(--text-muted);
+            flex-shrink: 0;
+            margin-top: 2px;
+            padding: 4px 6px;
+            text-align: center;
+        }
+
+        .sub-content { flex: 1; min-width: 0; }
+
+        .sub-title {
+            font-weight: 600;
+            font-size: 0.85rem;
+            color: var(--text-primary);
+            margin-bottom: 5px;
+            line-height: 1.3;
+            transition: color 0.2s;
+        }
+
+        .subscene-item:hover .sub-title { color: var(--gold-bright); }
+
+        .sub-action {
+            font-size: 0.78rem;
+            color: var(--text-secondary);
+            line-height: 1.6;
+            font-weight: 300;
+        }
+
+        /* ──────────────────────────────
+            KEYFRAMES
+        ────────────────────────────── */
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(28px) scale(0.98); }
+            to   { opacity: 1; transform: translateY(0) scale(1); }
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50%       { opacity: 0.4; }
+        }
+
+        @keyframes shimmer {
+            0%   { background-position: -200% 0; }
+            100% { background-position:  200% 0; }
+        }
+
+        /* ──────────────────────────────
+            RESPONSIVE
+        ────────────────────────────── */
+        @media (max-width: 640px) {
+            .section-title  { font-size: 2.2rem; }
+            .sb-title       { font-size: 2.2rem; }
+            .auth-panel     { padding: 36px 24px; }
+            .auth-panel h2  { font-size: 2rem; }
+            main            { padding: 40px 16px; }
+            .subscene-grid  { padding: 16px; gap: 16px; }
+            .stepper        { display: none; }
+            .header-inner   { padding: 0 16px; }
+            .upload-idle    { padding: 36px 20px; }
+            .upload-selected { padding: 36px 20px; }
+            .file-card      { flex-direction: column; text-align: center; }
+            .file-card-info { text-align: center; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- ── AUTH OVERLAY ── -->
+    <div id="auth-overlay">
+        <div class="auth-panel">
+            <div class="auth-logo">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
+                        d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z"/>
+                </svg>
+            </div>
+            <h2 id="auth-title">WELCOME BACK</h2>
+            <p class="subtitle">Sign in to access the production pipeline.</p>
+
+            <form id="auth-form" onsubmit="handleAuth(event)">
+                <div class="field-group">
+                    <label>Username</label>
+                    <input type="text" id="username" required autocomplete="username" placeholder="your_username">
+                </div>
+                <div class="field-group">
+                    <label>Password</label>
+                    <input type="password" id="password" required autocomplete="current-password" placeholder="••••••••">
+                </div>
+                <button type="submit" class="btn-primary">
+                    <span id="auth-btn-text">AUTHENTICATE</span>
+                </button>
+            </form>
+
+            <p class="auth-toggle">
+                <span id="auth-toggle-text">Don't have an account?</span>
+                <button onclick="toggleAuthMode()">Sign up</button>
+            </p>
+        </div>
+    </div>
+
+    <!-- ── HEADER ── -->
+    <header>
+        <div class="header-inner">
+            <div class="logo-mark">
+                <div class="logo-icon">
+                    <svg fill="none" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
+                            d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z"/>
+                    </svg>
+                </div>
+                <div class="logo-text">
+                    <div class="logo-name">Script Duniya</div>
+                    <div class="logo-tagline">Studio AI Pipeline</div>
+                </div>
+            </div>
+
+            <div class="stepper" id="stepper">
+                <span id="step-1" class="step-item active">1 · Setup</span>
+                <span class="step-sep">›</span>
+                <span id="step-2" class="step-item">2 · Analysis</span>
+                <span class="step-sep">›</span>
+                <span id="step-3" class="step-item">3 · Generation</span>
+                <span class="step-sep">›</span>
+                <span id="step-4" class="step-item">4 · Storyboard</span>
+            </div>
+
+            <button id="logout-btn" onclick="logout()" class="btn-logout hidden">
+                <svg fill="none" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
+                </svg>
+                Logout
+            </button>
+        </div>
+    </header>
+
+    <!-- ── TOASTS ── -->
+    <div id="toast-container"></div>
+
+    <main>
+
+        <!-- ── INPUT SECTION ── -->
+        <div id="input-section">
+            <div class="section-headline">
+                <!-- <div class="section-eyebrow">
+                    <span class="dot"></span>
+                    LangGraph Powered
+                </div> -->
+                <!-- <h2 class="section-title">INITIALIZE PRODUCTION</h2> -->
+                <p class="section-desc">Upload your screenplay as a PDF or Word document to begin automated breakdown and storyboard generation.</p>
+            </div>
+
+            <div class="editor-card">
+                <!-- Top bar -->
+                <div class="editor-topbar">
+                    <div class="traffic-lights">
+                        <div class="tl tl-r"></div>
+                        <div class="tl tl-y"></div>
+                        <div class="tl tl-g"></div>
+                    </div>
+                    <span class="editor-filename" id="editor-filename">no file selected</span>
+                    <span class="editor-badge">Screenplay</span>
+                </div>
+
+                <!-- Upload Zone -->
+                <div class="upload-zone" id="upload-zone">
+                    <input type="file" id="file-input" accept=".pdf,.docx" title="">
+
+                    <!-- Drag hint overlay -->
+                    <div class="drag-hint" id="drag-hint">
+                        <div class="drag-hint-inner">
+                            DROP TO UPLOAD
+                            <small>Release to select your screenplay</small>
+                        </div>
+                    </div>
+
+                    <!-- Idle state -->
+                    <div class="upload-idle" id="upload-idle">
+                        <div class="upload-icon-wrap">
+                            <svg fill="none" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
+                                    d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+                            </svg>
+                        </div>
+                        <div class="upload-label-main">DROP YOUR SCRIPT HERE</div>
+                        <div class="upload-label-sub">
+                            Drag and drop your screenplay file, or click anywhere to browse.<br>
+                            Text is extracted automatically — no copy-paste needed.
+                        </div>
+                        <div class="upload-formats">
+                            <span class="fmt-chip">PDF</span>
+                            <span class="fmt-chip">DOCX</span>
+                            <span class="fmt-chip">Max 10 MB</span>
+                        </div>
+                    </div>
+
+                    <!-- Selected state -->
+                    <div class="upload-selected" id="upload-selected">
+                        <div class="file-card">
+                            <div class="file-type-icon pdf" id="file-type-icon">
+                                <svg fill="none" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
+                                        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                                </svg>
+                            </div>
+                            <div class="file-card-info">
+                                <div class="file-name-display" id="file-name-display">filename.pdf</div>
+                                <div class="file-meta-row">
+                                    <span class="file-size-display" id="file-size-display">0 KB</span>
+                                    <span class="file-ready-badge">Ready</span>
+                                </div>
+                            </div>
+                            <div class="file-check-icon">
+                                <svg fill="none" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/>
+                                </svg>
+                            </div>
+                        </div>
+                        <button class="file-change-btn" onclick="clearFileSelection(event)">
+                            ✕ &nbsp; Change file
+                        </button>
+                    </div>
+
+                    <!-- Progress bar -->
+                    <div class="upload-progress" id="upload-progress">
+                        <div class="upload-progress-bar" id="upload-progress-bar"></div>
+                    </div>
+                </div>
+
+                <!-- Footer -->
+                <div class="editor-footer">
+                    <div class="footer-meta">
+                        <!-- <svg fill="none" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                        </svg>
+                        Powered by LangGraph -->
+                    </div>
+                    <button onclick="startPipeline()" class="btn-launch" id="launch-btn" disabled>
+                        <span>LAUNCH PIPELINE</span>
+                        <svg class="arrow" width="16" height="16" fill="none" viewBox="0 0 24 24">
+                            <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
+                                d="M14 5l7 7m0 0l-7 7m7-7H3"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── LOADING ── -->
+        <div id="loading" class="hidden">
+            <div class="loading-card">
+                <div class="spinner-wrap">
+                    <div class="spinner-ring ring-outer"></div>
+                    <div class="spinner-ring ring-spin"></div>
+                    <div class="spinner-ring ring-inner"></div>
+                    <div class="spinner-core">
+                        <svg fill="none" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
+                                d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"/>
+                        </svg>
+                    </div>
+                </div>
+                <div class="loading-title">PIPELINE ACTIVE</div>
+                <div class="loading-phase" id="loading-text">INITIALIZING AGENTS</div>
+                <p class="loading-note">This process runs continuously in the background and may take several minutes. Please do not close this tab.</p>
+            </div>
+        </div>
+
+        <!-- ── STORYBOARD ── -->
+        <div id="storyboard-section" class="hidden">
+            <div class="sb-header">
+                <div>
+                    <div class="status-pill"><span></span> Production Ready</div>
+                    <h2 id="storyboard-title" class="sb-title">FINAL STORYBOARD</h2>
+                    <div class="sb-meta">
+                        <div class="meta-chip">
+                            <svg fill="none" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"/>
+                            </svg>
+                            <span id="meta-style">Style</span>
+                        </div>
+                        <div class="meta-chip">
+                            <svg fill="none" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                            </svg>
+                            <span id="meta-palette">Palette</span>
+                        </div>
+                    </div>
+                </div>
+                <button onclick="location.reload()" class="btn-reset">
+                    <svg fill="none" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                    </svg>
+                    Process New Script
+                </button>
+            </div>
+            <div id="storyboard-content"></div>
+        </div>
+
+    </main>
+
+    <script>
+        // ─────────────────────────────────────────
+        // STATE
+        // ─────────────────────────────────────────
+        let currentThreadId = null;
+        let isLoginMode     = true;
+        let selectedFile    = null;
+
+        // ─────────────────────────────────────────
+        // INIT
+        // ─────────────────────────────────────────
+        document.addEventListener('DOMContentLoaded', () => {
+            // Auth check
+            if (localStorage.getItem('access_token')) {
+                document.getElementById('auth-overlay').classList.add('hidden');
+                document.getElementById('logout-btn').classList.remove('hidden');
+            }
+
+            const fileInput  = document.getElementById('file-input');
+            const uploadZone = document.getElementById('upload-zone');
+            const dragHint   = document.getElementById('drag-hint');
+
+            // File input change
+            fileInput.addEventListener('change', (e) => {
+                if (e.target.files && e.target.files[0]) {
+                    handleFileSelected(e.target.files[0]);
+                }
+            });
+
+            // Drag events
+            uploadZone.addEventListener('dragenter', (e) => {
+                e.preventDefault();
+                uploadZone.classList.add('drag-over');
+                dragHint.classList.add('visible');
+            });
+
+            uploadZone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                uploadZone.classList.add('drag-over');
+                dragHint.classList.add('visible');
+            });
+
+            uploadZone.addEventListener('dragleave', (e) => {
+                if (!uploadZone.contains(e.relatedTarget)) {
+                    uploadZone.classList.remove('drag-over');
+                    dragHint.classList.remove('visible');
+                }
+            });
+
+            uploadZone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                uploadZone.classList.remove('drag-over');
+                dragHint.classList.remove('visible');
+                const file = e.dataTransfer.files[0];
+                if (file) handleFileSelected(file);
+            });
+        });
+
+        // ─────────────────────────────────────────
+        // FILE HANDLING
+        // ─────────────────────────────────────────
+        function handleFileSelected(file) {
+            const allowedTypes = [
+                'application/pdf',
+                'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+            ];
+            const ext = '.' + file.name.split('.').pop().toLowerCase();
+
+            if (!allowedTypes.includes(file.type) && !['.pdf', '.docx'].includes(ext)) {
+                showToast('Only PDF and DOCX files are supported.', 'error');
+                return;
+            }
+            if (file.size > 10 * 1024 * 1024) {
+                showToast('File exceeds the 10 MB limit.', 'error');
+                return;
+            }
+
+            selectedFile = file;
+
+            // Update file type icon colour
+            const iconWrap = document.getElementById('file-type-icon');
+            iconWrap.className = 'file-type-icon ' + (ext === '.pdf' ? 'pdf' : 'docx');
+
+            // Populate selected state
+            document.getElementById('file-name-display').innerText = file.name;
+            document.getElementById('file-size-display').innerText = formatBytes(file.size);
+            document.getElementById('editor-filename').innerText   = file.name;
+            document.getElementById('editor-filename').classList.add('has-file');
+
+            // Swap idle ↔ selected
+            document.getElementById('upload-idle').classList.add('hidden-state');
+            document.getElementById('upload-selected').classList.add('visible');
+
+            // Enable launch button
+            const btn = document.getElementById('launch-btn');
+            btn.disabled = false;
+
+            showToast(`"${file.name}" ready to process.`, 'success');
+        }
+
+        function clearFileSelection(e) {
+            e.stopPropagation();
+            selectedFile = null;
+            document.getElementById('file-input').value = '';
+            document.getElementById('editor-filename').innerText = 'no file selected';
+            document.getElementById('editor-filename').classList.remove('has-file');
+            document.getElementById('upload-idle').classList.remove('hidden-state');
+            document.getElementById('upload-selected').classList.remove('visible');
+            document.getElementById('launch-btn').disabled = true;
+        }
+
+        function formatBytes(bytes) {
+            if (bytes < 1024)        return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+        }
+
+        // ─────────────────────────────────────────
+        // AUTH
+        // ─────────────────────────────────────────
+        function toggleAuthMode() {
+            isLoginMode = !isLoginMode;
+            document.getElementById('auth-title').innerText         = isLoginMode ? 'WELCOME BACK'   : 'CREATE ACCOUNT';
+            document.getElementById('auth-btn-text').innerText      = isLoginMode ? 'AUTHENTICATE'    : 'REGISTER';
+            document.getElementById('auth-toggle-text').innerText   = isLoginMode ? "Don't have an account?" : "Already have an account?";
+        }
+
+        async function handleAuth(e) {
+            e.preventDefault();
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const btn = document.getElementById('auth-btn-text');
+            const orig = btn.innerText;
+            btn.innerText = 'PROCESSING…';
+
+            try {
+                if (isLoginMode) {
+                    const form = new URLSearchParams();
+                    form.append('username', username);
+                    form.append('password', password);
+                    const res = await fetch('/api/login', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: form
+                    });
+                    if (!res.ok) throw new Error('Invalid credentials');
+                    const data = await res.json();
+                    localStorage.setItem('access_token', data.access_token);
+                    document.getElementById('auth-overlay').classList.add('hidden');
+                    document.getElementById('logout-btn').classList.remove('hidden');
+                    showToast('Authentication successful', 'success');
+                } else {
+                    const res = await fetch('/api/register', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ username, password })
+                    });
+                    if (!res.ok) {
+                        const err = await res.json();
+                        throw new Error(err.detail || 'Username taken or invalid');
+                    }
+                    showToast('Registration successful! Please log in.', 'success');
+                    toggleAuthMode();
+                }
+            } catch (err) {
+                showToast(err.message, 'error');
+            } finally {
+                btn.innerText = orig;
+            }
+        }
+
+        function logout() {
+            localStorage.removeItem('access_token');
+            location.reload();
+        }
+
+        function getAuthHeaders() {
+            const token = localStorage.getItem('access_token');
+            if (!token) {
+                document.getElementById('auth-overlay').classList.remove('hidden');
+                throw new Error('Not authenticated');
+            }
+            return { 'Authorization': `Bearer ${token}` };
+        }
+
+        // ─────────────────────────────────────────
+        // TOAST
+        // ─────────────────────────────────────────
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toast-container');
+            const el = document.createElement('div');
+            el.className = `toast ${type}`;
+
+            const icons = {
+                info:    `<svg fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>`,
+                error:   `<svg fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>`,
+                success: `<svg fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>`,
+            };
+
+            el.innerHTML = (icons[type] || icons.info) + message;
+            container.appendChild(el);
+            setTimeout(() => {
+                el.style.transition = 'opacity 0.3s, transform 0.3s';
+                el.style.opacity    = '0';
+                el.style.transform  = 'translateY(8px)';
+                setTimeout(() => el.remove(), 300);
+            }, 4000);
+        }
+
+        // ─────────────────────────────────────────
+        // STEPPER
+        // ─────────────────────────────────────────
+        function updateStepper(step) {
+            [1, 2, 3, 4].forEach(s => {
+                const el = document.getElementById(`step-${s}`);
+                if (!el) return;
+                el.className = s === step ? 'step-item active' : s < step ? 'step-item done' : 'step-item';
+            });
+        }
+
+        // ─────────────────────────────────────────
+        // PIPELINE — FILE UPLOAD
+        // ─────────────────────────────────────────
+        async function startPipeline() {
+            if (!selectedFile) return showToast('Please select a file first.', 'error');
+
+            let headers;
+            try { headers = getAuthHeaders(); } catch (e) { return; }
+
+            // Animate progress bar
+            const progressWrap = document.getElementById('upload-progress');
+            const progressBar  = document.getElementById('upload-progress-bar');
+            progressWrap.classList.add('active');
+
+            let fakeProgress = 0;
+            const fakeTimer = setInterval(() => {
+                fakeProgress = Math.min(fakeProgress + Math.random() * 12, 88);
+                progressBar.style.width = fakeProgress + '%';
+            }, 180);
+
+            const launchBtn = document.getElementById('launch-btn');
+            launchBtn.disabled = true;
+
+            const formData = new FormData();
+            formData.append('file', selectedFile);
+
+            // NOTE: Do NOT set Content-Type manually — browser sets multipart boundary automatically
+            try {
+                const res = await fetch('/api/start', {
+                    method: 'POST',
+                    headers,   // only Authorization header; no Content-Type
+                    body: formData
+                });
+
+                clearInterval(fakeTimer);
+                progressBar.style.width = '100%';
+                await new Promise(r => setTimeout(r, 400));
+
+                if (res.status === 401) return logout();
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({}));
+                    throw new Error(err.detail || 'Upload failed. Please try again.');
+                }
+
+                const data = await res.json();
+                currentThreadId = data.thread_id;
+
+                document.getElementById('input-section').classList.add('hidden');
+                document.getElementById('loading').classList.remove('hidden');
+                updateStepper(2);
+                pollState();
+
+            } catch (err) {
+                clearInterval(fakeTimer);
+                progressWrap.classList.remove('active');
+                progressBar.style.width = '0%';
+                launchBtn.disabled = false;
+                showToast(err.message, 'error');
+            }
+        }
+
+        // ─────────────────────────────────────────
+        // POLLING
+        // ─────────────────────────────────────────
+        async function pollState() {
+            let headers;
+            try { headers = getAuthHeaders(); } catch (e) { return; }
+
+            setTimeout(async () => {
+                try {
+                    const res = await fetch(`/api/state/${currentThreadId}`, { headers });
+                    if (res.status === 401) return logout();
+                    if (!res.ok && res.status === 404) return pollState();
+
+                    const state = await res.json();
+                    const step  = (state.values && state.values.current_step) || 'initializing';
+
+                    // Render when pipeline is done
+                    if (step === 'completed' || state.is_finished) {
+                        renderStoryboard(state.values);
+                        return;
+                    }
+
+                    // Update loading phase label
+                    document.getElementById('loading-text').innerText =
+                        `PHASE: ${step.replace(/_/g, ' ').toUpperCase()}`;
+
+                    // Update stepper
+                    if (['characters_extracted', 'scenes_split', 'scene_inventories_extracted',
+                         'frames_planned', 'frames_audited_and_repaired'].includes(step)) {
+                        updateStepper(2);
+                    } else if (['character_references_generated', 'scene_references_generated',
+                                'frames_generated'].includes(step)) {
+                        updateStepper(3);
+                    }
+
+                    pollState();
+                } catch (err) {
+                    console.error('Polling error:', err);
+                    pollState();
+                }
+            }, 5000);
+        }
+
+        // ─────────────────────────────────────────
+        // RENDER STORYBOARD
+        // ─────────────────────────────────────────
+        function renderStoryboard(stateValues) {
+            updateStepper(4);
+            document.getElementById('loading').classList.add('hidden');
+            document.getElementById('storyboard-section').classList.remove('hidden');
+
+            // Prefer final_output; fall back to breakdown
+            const breakdown = stateValues.final_output || stateValues.breakdown || {};
+            const scenes    = breakdown.scenes || [];
+
+            const title = (breakdown.screenplay_title || breakdown.title || 'Untitled Screenplay').toUpperCase();
+            document.getElementById('storyboard-title').innerText  = title;
+            document.getElementById('meta-style').innerText        = breakdown.visual_style  || 'N/A';
+            document.getElementById('meta-palette').innerText      = breakdown.color_palette || 'N/A';
+
+            const container = document.getElementById('storyboard-content');
+
+            if (!scenes.length) {
+                container.innerHTML = `
+                    <div style="padding:60px 40px;text-align:center;color:var(--text-muted);
+                        font-family:var(--ff-mono);font-size:0.8rem;letter-spacing:0.1em;
+                        border:1px solid var(--border-dim);border-radius:var(--radius-xl);">
+                        NO SCENE DATA FOUND — pipeline may still be saving output.
+                    </div>`;
+                return;
+            }
+
+            container.innerHTML = scenes.map((scene, index) => {
+                const frameItems = (scene.frames || []).map((frame, frameIndex) => {
+                    const frameLabel = frame.frame_id || String(frameIndex + 1);
+
+                    const imgContent = frame.image_url
+                        ? `<img src="${frame.image_url}" alt="${(frame.title || '').replace(/"/g, '&quot;')}" loading="lazy">`
+                        : `<div class="img-placeholder">
+                               <svg fill="none" viewBox="0 0 24 24">
+                                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                                       d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                               </svg>
+                               Image Unavailable
+                           </div>`;
+
+                    const clickHandler = frame.image_url
+                        ? `onclick="window.open('${frame.image_url}','_blank')"`
+                        : '';
+
+                    return `
+                        <div class="subscene-item" ${clickHandler}>
+                            <div class="img-frame">
+                                ${imgContent}
+                                <div class="cam-badge">${frame.shot_type || 'Shot'}</div>
+                                <div class="img-overlay">
+                                    <svg fill="none" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                                    </svg>
+                                </div>
+                            </div>
+                            <div class="subscene-body">
+                                <div class="sub-num">${frameLabel}</div>
+                                <div class="sub-content">
+                                    <div class="sub-title">${frame.title || 'Untitled Frame'}</div>
+                                    <div class="sub-action">${frame.action || 'No action specified.'}</div>
+                                </div>
+                            </div>
+                        </div>`;
+                }).join('');
+
+                return `
+                    <div class="scene-card">
+                        <div class="scene-head">
+                            <div class="scene-num">SCENE ${scene.scene_number || index + 1}</div>
+                            <div class="scene-heading-text">${scene.scene_heading || 'UNTITLED SCENE'}</div>
+                            <div class="scene-tod">
+                                <svg fill="none" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                </svg>
+                                ${scene.time_of_day || 'DAY'}
+                            </div>
+                        </div>
+                        <div class="scene-summary">
+                            <p>${scene.summary || 'No summary available.'}</p>
+                        </div>
+                        <div class="subscene-grid">
+                            ${frameItems || '<div style="padding:20px;color:var(--text-muted);font-family:var(--ff-mono);font-size:0.75rem;letter-spacing:0.08em;">NO FRAMES GENERATED FOR THIS SCENE</div>'}
+                        </div>
+                    </div>`;
+            }).join('');
+        }
+    </script>
+</body>
+</html>

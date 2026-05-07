@@ -1,0 +1,15 @@
+fastapi
+uvicorn
+pydantic
+pymongo
+azure-storage-blob
+langchain-openai
+langchain-core
+langgraph
+requests
+pypdf
+python-docx
+python-jose[cryptography]
+bcrypt
+python-multipart
+langgraph-checkpoint-mongodb
