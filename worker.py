@@ -98,11 +98,10 @@
 
 
 
-
-
-
 import os
+import sys
 import json
+import signal
 import logging
 from azure.servicebus import ServiceBusClient, AutoLockRenewer
 from new import app_graph, projects_collection
@@ -114,9 +113,33 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 log = logging.getLogger(__name__)
 
 SERVICE_BUS_CONN_STR = os.getenv("SERVICE_BUS_CONN_STR")
-QUEUE_NAME = "pipeline-jobs"
-# గరిష్టంగా 10 గంటల వరకు లాక్ ని రెన్యువల్ చేయడానికి (36000 సెకన్లు)
-MAX_LOCK_DURATION = 36000 
+QUEUE_NAME = os.getenv("QUEUE_NAME", "pipeline-jobs")
+
+# Service Bus lock renewal has no hard ceiling you can rely on indefinitely,
+# but AutoLockRenewer will keep renewing as long as the process is alive and
+# this value is large. For runs that may exceed 24h, set this very high
+# (e.g. 172800 = 48h) and rely on the renewer thread, not a fixed max.
+MAX_LOCK_DURATION = int(os.getenv("MAX_LOCK_DURATION", "172800"))  # 48 hours
+RECEIVE_WAIT_SECONDS = int(os.getenv("RECEIVE_WAIT_SECONDS", "30"))
+
+# Set to True when the process should stop picking up NEW messages
+# (e.g. on SIGTERM from Container Apps during a redeploy/scale event).
+# We do NOT interrupt an in-flight pipeline run when this fires — it just
+# stops the loop from picking up the next message after the current one
+# finishes, since a 24h+ pipeline can't be safely paused mid-flight.
+_shutdown_requested = False
+
+
+def _handle_sigterm(signum, frame):
+    global _shutdown_requested
+    log.warning(f"Received signal {signum}. Will stop after current message completes "
+                f"(in-flight pipeline run will NOT be interrupted).")
+    _shutdown_requested = True
+
+
+signal.signal(signal.SIGTERM, _handle_sigterm)
+signal.signal(signal.SIGINT, _handle_sigterm)
+
 
 def process_pipeline_job(payload: dict):
     thread_id = payload.get("thread_id")
@@ -132,49 +155,86 @@ def process_pipeline_job(payload: dict):
 
     try:
         if action == "resume":
-            # API లో ఆగిపోయిన చోట నుంచి మళ్లీ స్టార్ట్ చేయడానికి (None పాస్ చేయాలి)
             app_graph.invoke(None, config)
         elif action == "start":
-            # ఫ్రెష్ గా స్టార్ట్ చేయడానికి
             initial_state = {
-                "screenplay_text": payload.get("screenplay_text"), 
+                "screenplay_text": payload.get("screenplay_text"),
                 "current_step": "init"
             }
             app_graph.invoke(initial_state, config)
-            
+        else:
+            raise ValueError(f"Unknown action '{action}' in payload for thread_id={thread_id}")
+
         log.info(f"Successfully completed LangGraph execution for {thread_id}")
+
     except Exception as e:
         log.error(f"LangGraph execution failed for {thread_id}: {e}")
         projects_collection.update_one(
             {"thread_id": thread_id},
             {"$set": {"status": "failed", "error_message": str(e)}}
         )
-        raise e
+        raise
+
 
 def main():
+    """
+    Long-running worker for a regular Azure Container App (minReplicas >= 1),
+    NOT a Container App Job. This process polls Service Bus forever and
+    processes messages one at a time, in-line, exactly like your original
+    design — but with graceful-shutdown handling and a much longer lock
+    renewal ceiling to support pipeline runs that can exceed 24 hours.
+
+    Container App Jobs are NOT used here because their replicaTimeout has a
+    hard 24-hour maximum, which this pipeline can exceed.
+    """
+    if not SERVICE_BUS_CONN_STR:
+        log.error("SERVICE_BUS_CONN_STR is not set. Exiting.")
+        sys.exit(1)
+
     log.info("Worker started. Listening for Service Bus messages...")
-    
-    # AutoLockRenewer అనేది బ్యాక్ గ్రౌండ్ లో థ్రెడ్ లాగా రన్ అవుతూ లాక్ ఎక్స్పైర్ అవ్వకుండా చూసుకుంటుంది
-    renewer = AutoLockRenewer(max_lock_renewal_duration=MAX_LOCK_DURATION)
-    
+
     with ServiceBusClient.from_connection_string(SERVICE_BUS_CONN_STR) as client:
-        with client.get_queue_receiver(queue_name=QUEUE_NAME, prefetch_count=1) as receiver:
-            for msg in receiver:
-                # మెసేజ్ రాగానే లాక్ రెన్యువల్ కి రిజిస్టర్ చేయాలి
+        with client.get_queue_receiver(
+            queue_name=QUEUE_NAME,
+            max_wait_time=RECEIVE_WAIT_SECONDS,
+        ) as receiver:
+
+            while not _shutdown_requested:
+                msgs = receiver.receive_messages(
+                    max_message_count=1,
+                    max_wait_time=RECEIVE_WAIT_SECONDS,
+                )
+
+                if not msgs:
+                    # Nothing on the queue right now — loop again and keep
+                    # listening. This is a long-lived process, not a one-shot.
+                    continue
+
+                msg = msgs[0]
+
+                renewer = AutoLockRenewer(max_lock_renewal_duration=MAX_LOCK_DURATION)
                 renewer.register(receiver, msg, max_lock_renewal_duration=MAX_LOCK_DURATION)
-                
+
                 try:
                     payload = json.loads(str(msg))
                     process_pipeline_job(payload)
-                    
-                    # జాబ్ సక్సెస్ అయ్యాక క్యూ లో నుంచి మెసేజ్ డిలీట్ చేయాలి
+
                     receiver.complete_message(msg)
-                    log.info("Message fully processed and removed from queue.")
-                    
+                    log.info("Message processed and removed from queue successfully.")
+
                 except Exception as e:
                     log.error(f"Failed to process message: {e}")
-                    # ఏదైనా ఎర్రర్ వస్తే మెసేజ్ ని అబాండన్ (abandon) చేయాలి, అప్పుడు అది మళ్లీ క్యూ లోకి వెళ్తుంది
-                    receiver.abandon_message(msg)
+                    try:
+                        receiver.abandon_message(msg)
+                        log.info("Message abandoned; it will become visible again for retry.")
+                    except Exception as abandon_err:
+                        log.error(f"Failed to abandon message (lock may have expired): {abandon_err}")
+
+                finally:
+                    renewer.close()
+
+            log.info("Shutdown requested and no message in flight. Exiting main loop.")
+
 
 if __name__ == "__main__":
     main()

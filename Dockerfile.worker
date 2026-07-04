@@ -1,19 +1,38 @@
-# బేస్ ఇమేజ్
+# ---- బేస్ ఇమేజ్ ----
 FROM python:3.11-slim
 
 # వర్కింగ్ డైరెక్టరీ సెటప్
 WORKDIR /app
 
-# పైథాన్ లాగ్స్ వెంటనే అజూర్ లో కనిపించడానికి (చాలా ముఖ్యం)
-ENV PYTHONUNBUFFERED=1
+# పైథాన్ లాగ్స్ వెంటనే అజూర్ లో కనిపించడానికి (చాలా ముఖ్యం, ఇది long-running
+# process కాబట్టి logs real-time గా కనిపించాలి), .pyc ఫైల్స్ రాయకుండా
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
 
-# రిక్వైర్మెంట్స్ కాపీ చేసి ఇన్స్టాల్ చేయండి 
-# (అజూర్ సర్వీస్ బస్ ప్యాకేజీ కూడా ఇందులో ఉండేలా చూసుకోండి)
+# సిస్టమ్ డిపెండెన్సీలు (Pillow వంటి image-processing libs కు అవసరమైతే)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libjpeg62-turbo \
+    zlib1g \
+    && rm -rf /var/lib/apt/lists/*
+
+# రిక్వైర్మెంట్స్ కాపీ చేసి ఇన్స్టాల్ చేయండి (layer caching కోసం ముందుగా)
+# అజూర్ సర్వీస్ బస్ ప్యాకేజీ కూడా ఇందులో ఉండేలా చూసుకోండి
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # కోడ్ కాపీ చేయండి
 COPY . .
 
-# ఇది వెబ్ సర్వర్ కాదు కాబట్టి uvicorn వాడకూడదు. డైరెక్ట్ గా పైథాన్ ఫైల్ రన్ చేయాలి.
+# non-root user తో రన్ చేయడం — security best practice
+RUN useradd --create-home --shell /bin/bash appuser \
+    && chown -R appuser:appuser /app
+USER appuser
+
+# ఇది వెబ్ సర్వర్ కాదు కాబట్టి uvicorn వాడకూడదు, EXPOSE కూడా అవసరం లేదు.
+# ఇది long-running process — Service Bus queue ని ఎప్పుడూ వింటూ ఉంటుంది.
+# Container App లో ఇది minReplicas: 1, maxReplicas: 1 (లేదా అవసరాన్ని బట్టి
+# ఎక్కువ) తో deploy చేయాలి, Container App Job గా కాదు.
+
+# graceful shutdown కోసం (SIGTERM ని worker.py లో handle చేస్తున్నాం),
+# exec form CMD వాడటం వల్ల python ప్రాసెస్ కి నేరుగా signal వెళ్తుంది
 CMD ["python", "worker.py"]
