@@ -418,54 +418,70 @@ async def resume_pipeline(
     req: ResumePipelineRequest,
     current_user: dict = Depends(get_current_user)
 ):
-    """
-    Phase 2 of the two-phase flow.
-    Called after the user has finished uploading character reference photos
-    (or skipped uploads entirely). Queues the resume job on Service Bus so
-    the heavy LangGraph run happens in a separate worker process — if the
-    API container restarts/scales down, the job is not lost.
-    """
     config = {"configurable": {"thread_id": req.thread_id}}
-
-    # Verify state exists
     state = app_graph.get_state(config)
+    
     if not state or not state.values:
         raise HTTPException(status_code=404, detail="Pipeline state not found.")
 
-    # Update Cosmos DB status
+    # స్టేటస్ ని queued కి మార్చండి
     projects_collection.update_one(
         {"thread_id": req.thread_id},
-        {"$set": {"status": "queued_for_resume"}}
+        {"$set": {"status": "queued_for_processing"}}
     )
 
-    # Push a small "resume" message to Service Bus instead of running
-    # the pipeline inline. The worker picks this up and calls
-    # app_graph.invoke(None, config) to continue from the interrupt point.
+    # బ్యాక్ గ్రౌండ్ టాస్క్ బదులు సర్వీస్ బస్ కి మెసేజ్ పంపుతున్నాం
     try:
-        with ServiceBusClient.from_connection_string(SERVICE_BUS_CONN_STR) as sb_client:
-            with sb_client.get_queue_sender(queue_name=QUEUE_NAME) as sender:
+        with ServiceBusClient.from_connection_string(SERVICE_BUS_CONN_STR) as client:
+            with client.get_queue_sender(queue_name=QUEUE_NAME) as sender:
                 message_payload = {
-                    "action": "resume",
-                    "thread_id": req.thread_id
+                    "thread_id": req.thread_id,
+                    "action": "resume" # వర్కర్ కి ఇది రిజ్యూమ్ జాబ్ అని చెప్పడానికి
                 }
                 message = ServiceBusMessage(json.dumps(message_payload))
                 sender.send_messages(message)
     except Exception as e:
-        projects_collection.update_one(
-            {"thread_id": req.thread_id},
-            {"$set": {"status": "queue_failed"}}
-        )
-        raise HTTPException(status_code=500, detail=f"Failed to queue resume job: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to queue job: {str(e)}")
 
     return {
         "thread_id": req.thread_id,
-        "message": "Pipeline resume queued. Poll /api/state/{thread_id} for progress."
+        "message": "Pipeline queued. Poll /api/state/{thread_id} for progress."
     }
 
 
+# మీరు డైరెక్ట్ గా స్టార్ట్ చేయాలి అనుకుంటే /api/start ని ఇలా మార్చండి
+@app.post("/api/start")
+async def start_pipeline(
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user)
+):
+    screenplay_text = await extract_text_from_file(file)
+    thread_id = str(uuid.uuid4())
+    
+    projects_collection.insert_one({
+        "thread_id": thread_id,
+        "username": current_user["username"],
+        "status": "queued",
+        "original_screenplay": screenplay_text
+    })
+    
+    try:
+        with ServiceBusClient.from_connection_string(SERVICE_BUS_CONN_STR) as client:
+            with client.get_queue_sender(queue_name=QUEUE_NAME) as sender:
+                message_payload = {
+                    "thread_id": thread_id,
+                    "action": "start",
+                    "screenplay_text": screenplay_text
+                }
+                message = ServiceBusMessage(json.dumps(message_payload))
+                sender.send_messages(message)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to queue job: {str(e)}")
+    
+    return {"thread_id": thread_id, "message": "Pipeline queued successfully"}
 
 
-
+################################# commented on july 4 2026 #####################
 # @app.post("/api/resume-pipeline")
 # async def resume_pipeline(
 #     req: ResumePipelineRequest,

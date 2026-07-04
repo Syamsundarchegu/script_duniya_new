@@ -101,55 +101,80 @@
 
 
 
-# worker.py
+import os
 import json
 import logging
-from azure.servicebus import ServiceBusClient
-from new import app_graph
-import os
+from azure.servicebus import ServiceBusClient, AutoLockRenewer
+from new import app_graph, projects_collection
 from dotenv import load_dotenv
 
 load_dotenv()
-log = logging.getLogger("worker")
-logging.basicConfig(level=logging.INFO)
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+log = logging.getLogger(__name__)
 
 SERVICE_BUS_CONN_STR = os.getenv("SERVICE_BUS_CONN_STR")
 QUEUE_NAME = "pipeline-jobs"
+# గరిష్టంగా 10 గంటల వరకు లాక్ ని రెన్యువల్ చేయడానికి (36000 సెకన్లు)
+MAX_LOCK_DURATION = 36000 
 
-def process_message(msg_body: dict):
-    thread_id = msg_body["thread_id"]
-    action = msg_body.get("action", "start")  # "start" (fresh) or "resume" (after character uploads)
+def process_pipeline_job(payload: dict):
+    thread_id = payload.get("thread_id")
+    action = payload.get("action")
     config = {"configurable": {"thread_id": thread_id}}
 
-    if action == "resume":
-        # Character upload phase already ran via /api/extract-characters and
-        # /api/upload-character-reference. The graph state already has
-        # user_uploaded_images populated — just continue from the interrupt point.
-        log.info(f"Resuming pipeline for thread_id={thread_id}")
-        app_graph.invoke(None, config)
-        log.info(f"Resume completed for thread_id={thread_id}")
-    else:
-        # Fresh run — not used by the current frontend (which always goes
-        # through extract-characters -> resume-pipeline), but kept for
-        # any direct /api/start callers.
-        screenplay_text = msg_body["screenplay_text"]
-        initial_state = {"screenplay_text": screenplay_text, "current_step": "init"}
-        log.info(f"Starting fresh pipeline for thread_id={thread_id}")
-        app_graph.invoke(initial_state, config)
-        log.info(f"Start completed for thread_id={thread_id}")
+    log.info(f"Starting job processing for thread_id: {thread_id} with action: {action}")
 
-def run_worker():
+    projects_collection.update_one(
+        {"thread_id": thread_id},
+        {"$set": {"status": "processing"}}
+    )
+
+    try:
+        if action == "resume":
+            # API లో ఆగిపోయిన చోట నుంచి మళ్లీ స్టార్ట్ చేయడానికి (None పాస్ చేయాలి)
+            app_graph.invoke(None, config)
+        elif action == "start":
+            # ఫ్రెష్ గా స్టార్ట్ చేయడానికి
+            initial_state = {
+                "screenplay_text": payload.get("screenplay_text"), 
+                "current_step": "init"
+            }
+            app_graph.invoke(initial_state, config)
+            
+        log.info(f"Successfully completed LangGraph execution for {thread_id}")
+    except Exception as e:
+        log.error(f"LangGraph execution failed for {thread_id}: {e}")
+        projects_collection.update_one(
+            {"thread_id": thread_id},
+            {"$set": {"status": "failed", "error_message": str(e)}}
+        )
+        raise e
+
+def main():
+    log.info("Worker started. Listening for Service Bus messages...")
+    
+    # AutoLockRenewer అనేది బ్యాక్ గ్రౌండ్ లో థ్రెడ్ లాగా రన్ అవుతూ లాక్ ఎక్స్పైర్ అవ్వకుండా చూసుకుంటుంది
+    renewer = AutoLockRenewer(max_lock_renewal_duration=MAX_LOCK_DURATION)
+    
     with ServiceBusClient.from_connection_string(SERVICE_BUS_CONN_STR) as client:
-        with client.get_queue_receiver(queue_name=QUEUE_NAME, max_wait_time=30) as receiver:
-            log.info("Worker started, listening for messages...")
+        with client.get_queue_receiver(queue_name=QUEUE_NAME, prefetch_count=1) as receiver:
             for msg in receiver:
+                # మెసేజ్ రాగానే లాక్ రెన్యువల్ కి రిజిస్టర్ చేయాలి
+                renewer.register(receiver, msg, max_lock_renewal_duration=MAX_LOCK_DURATION)
+                
                 try:
-                    body = json.loads(str(msg))
-                    process_message(body)
+                    payload = json.loads(str(msg))
+                    process_pipeline_job(payload)
+                    
+                    # జాబ్ సక్సెస్ అయ్యాక క్యూ లో నుంచి మెసేజ్ డిలీట్ చేయాలి
                     receiver.complete_message(msg)
+                    log.info("Message fully processed and removed from queue.")
+                    
                 except Exception as e:
-                    log.error(f"Message processing failed: {e}")
+                    log.error(f"Failed to process message: {e}")
+                    # ఏదైనా ఎర్రర్ వస్తే మెసేజ్ ని అబాండన్ (abandon) చేయాలి, అప్పుడు అది మళ్లీ క్యూ లోకి వెళ్తుంది
                     receiver.abandon_message(msg)
 
 if __name__ == "__main__":
-    run_worker()
+    main()

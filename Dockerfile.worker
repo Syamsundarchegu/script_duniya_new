@@ -1,7 +1,19 @@
+# బేస్ ఇమేజ్
 FROM python:3.11-slim
+
+# వర్కింగ్ డైరెక్టరీ సెటప్
 WORKDIR /app
+
+# పైథాన్ లాగ్స్ వెంటనే అజూర్ లో కనిపించడానికి (చాలా ముఖ్యం)
+ENV PYTHONUNBUFFERED=1
+
+# రిక్వైర్మెంట్స్ కాపీ చేసి ఇన్స్టాల్ చేయండి 
+# (అజూర్ సర్వీస్ బస్ ప్యాకేజీ కూడా ఇందులో ఉండేలా చూసుకోండి)
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+
+# కోడ్ కాపీ చేయండి
 COPY . .
-# Start the background listener
+
+# ఇది వెబ్ సర్వర్ కాదు కాబట్టి uvicorn వాడకూడదు. డైరెక్ట్ గా పైథాన్ ఫైల్ రన్ చేయాలి.
 CMD ["python", "worker.py"]

@@ -1,7 +1,21 @@
+# బేస్ ఇమేజ్
 FROM python:3.11-slim
+
+# వర్కింగ్ డైరెక్టరీ సెటప్
 WORKDIR /app
+
+# పైథాన్ లాగ్స్ వెంటనే అజూర్ లో కనిపించడానికి 
+ENV PYTHONUNBUFFERED=1
+
+# ముందుగా రిక్వైర్మెంట్స్ కాపీ చేసి ఇన్స్టాల్ చేయండి (క్యాచింగ్ కోసం)
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+
+# మిగతా కోడ్ అంతా కాపీ చేయండి
 COPY . .
-# Start FastAPI
-CMD ["uvicorn", "backend:app", "--host", "0.0.0.0", "--port", "80"]
+
+# FastAPI రన్ అవ్వాల్సిన పోర్ట్
+EXPOSE 8000
+
+# అప్లికేషన్ స్టార్ట్ చేసే కమాండ్
+CMD ["uvicorn", "backend:app", "--host", "0.0.0.0", "--port", "8000"]
