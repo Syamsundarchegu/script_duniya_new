@@ -1,37 +1,21 @@
-# ---- బేస్ ఇమేజ్ ----
+# బేస్ ఇమేజ్ (LangGraph/LangChain కి పైథాన్ 3.11 బెస్ట్)
 FROM python:3.11-slim
 
 # వర్కింగ్ డైరెక్టరీ సెటప్
 WORKDIR /app
 
-# పైథాన్ లాగ్స్ వెంటనే అజూర్ లో కనిపించడానికి, .pyc ఫైల్స్ రాయకుండా
-ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1
+# పైథాన్ లాగ్స్ కన్సోల్ లో వెంటనే ప్రింట్ అవ్వడానికి
+ENV PYTHONUNBUFFERED=1
 
-# సిస్టమ్ డిపెండెన్సీలు (pypdf/python-docx వంటి libs కు అవసరమైతే)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
-
-# ముందుగా రిక్వైర్మెంట్స్ కాపీ చేసి ఇన్స్టాల్ చేయండి (Docker layer caching కోసం —
-# requirements.txt మారకపోతే, కోడ్ మారినా pip install మళ్ళీ రన్ అవ్వదు)
+# ముందుగా రిక్వైర్మెంట్స్ కాపీ చేసి ఇన్స్టాల్ చేయండి
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # మిగతా కోడ్ అంతా కాపీ చేయండి
 COPY . .
 
-# non-root user తో రన్ చేయడం — security best practice
-RUN useradd --create-home --shell /bin/bash appuser \
-    && chown -R appuser:appuser /app
-USER appuser
-
 # FastAPI రన్ అవ్వాల్సిన పోర్ట్
 EXPOSE 8000
-
-# Container Apps ఈ endpoint ని health probe కోసం వాడొచ్చు
-HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-    CMD curl -f http://localhost:8000/ || exit 1
 
 # అప్లికేషన్ స్టార్ట్ చేసే కమాండ్
 CMD ["uvicorn", "backend:app", "--host", "0.0.0.0", "--port", "8000"]

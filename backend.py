@@ -412,40 +412,43 @@ class ResumePipelineRequest(BaseModel):
     thread_id: str
 
 
-@app.post("/api/resume-pipeline")
-async def resume_pipeline(
-    req: ResumePipelineRequest,
+
+
+# 3. ఒకవేళ డైరెక్ట్ గా స్టార్ట్ చేసే /api/start ఎండ్ పాయింట్ వాడుతుంటే దాన్ని ఇలా మార్చండి
+@app.post("/api/start")
+async def start_pipeline(
+    file: UploadFile = File(...),
     current_user: dict = Depends(get_current_user)
 ):
-    config = {"configurable": {"thread_id": req.thread_id}}
-    state = app_graph.get_state(config)
-    if not state or not state.values:
-        raise HTTPException(status_code=404, detail="Pipeline state not found.")
-
-    projects_collection.update_one(
-        {"thread_id": req.thread_id},
-        {"$set": {"status": "queued_for_processing"}}
-    )
-
+    screenplay_text = await extract_text_from_file(file)
+    thread_id = str(uuid.uuid4())
+    
+    projects_collection.insert_one({
+        "thread_id": thread_id,
+        "username": current_user["username"],
+        "status": "queued",
+        "original_screenplay": screenplay_text
+    })
+    
     try:
         with ServiceBusClient.from_connection_string(SERVICE_BUS_CONN_STR) as client:
             with client.get_queue_sender(queue_name=QUEUE_NAME) as sender:
                 message_payload = {
-                    "thread_id": req.thread_id,
-                    "action": "resume"
+                    "thread_id": thread_id,
+                    "action": "start",
+                    "screenplay_text": screenplay_text
                 }
                 message = ServiceBusMessage(json.dumps(message_payload))
                 sender.send_messages(message)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to queue job: {str(e)}")
-
-    return {
-        "thread_id": req.thread_id,
-        "message": "Pipeline queued. Poll /api/state/{thread_id} for progress."
-    }
+    
+    return {"thread_id": thread_id, "message": "Pipeline queued successfully"}
 
 
-#################### commented on july 2026 ##################33
+
+
+################# commented on july 2026 #########################
 # @app.post("/api/resume-pipeline")
 # async def resume_pipeline(
 #     req: ResumePipelineRequest,
@@ -539,7 +542,45 @@ def run_pipeline_background(initial_state: dict, config: dict):
 
 
 
-####################### commented on july 4 2026 #######################33
+# 2. /api/resume-pipeline ని ఇలా మార్చండి
+@app.post("/api/resume-pipeline")
+async def resume_pipeline(
+    req: ResumePipelineRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    config = {"configurable": {"thread_id": req.thread_id}}
+
+    state = app_graph.get_state(config)
+    if not state or not state.values:
+        raise HTTPException(status_code=404, detail="Pipeline state not found.")
+
+    projects_collection.update_one(
+        {"thread_id": req.thread_id},
+        {"$set": {"status": "queued_for_processing"}}
+    )
+
+    try:
+        with ServiceBusClient.from_connection_string(SERVICE_BUS_CONN_STR) as client:
+            with client.get_queue_sender(queue_name=QUEUE_NAME) as sender:
+                message_payload = {
+                    "thread_id": req.thread_id,
+                    "action": "resume"
+                }
+                message = ServiceBusMessage(json.dumps(message_payload))
+                sender.send_messages(message)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to queue job: {str(e)}")
+
+    return {
+        "thread_id": req.thread_id,
+        "message": "Pipeline queued. Poll /api/state/{thread_id} for progress."
+    }
+
+
+
+
+
+################### commented on july 2026 ###################33
 # @app.post("/api/start")
 # async def start_pipeline(
 #     background_tasks: BackgroundTasks,
@@ -563,39 +604,6 @@ def run_pipeline_background(initial_state: dict, config: dict):
 #     background_tasks.add_task(run_pipeline_background, initial_state, config)
     
 #     return {"thread_id": thread_id, "message": "Pipeline started in background"}
-
-
-
-
-@app.post("/api/start")
-async def start_pipeline(
-    file: UploadFile = File(...),
-    current_user: dict = Depends(get_current_user)
-):
-    screenplay_text = await extract_text_from_file(file)
-    thread_id = str(uuid.uuid4())
-
-    projects_collection.insert_one({
-        "thread_id": thread_id,
-        "username": current_user["username"],
-        "status": "queued",
-        "original_screenplay": screenplay_text
-    })
-
-    try:
-        with ServiceBusClient.from_connection_string(SERVICE_BUS_CONN_STR) as client:
-            with client.get_queue_sender(queue_name=QUEUE_NAME) as sender:
-                message_payload = {
-                    "thread_id": thread_id,
-                    "action": "start",
-                    "screenplay_text": screenplay_text
-                }
-                message = ServiceBusMessage(json.dumps(message_payload))
-                sender.send_messages(message)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to queue job: {str(e)}")
-
-    return {"thread_id": thread_id, "message": "Pipeline queued successfully"}
 
 
 
