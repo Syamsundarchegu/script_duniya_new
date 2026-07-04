@@ -15,3 +15,4 @@ python-multipart
 langgraph-checkpoint-mongodb
 python-dotenv
 azure-servicebus>=7.11.0
+Pillow
