@@ -1,5 +1,5 @@
 # backend.py
-from fastapi import FastAPI, HTTPException, Body, File, UploadFile,BackgroundTasks, Depends
+from fastapi import FastAPI, HTTPException, Body, File, UploadFile,BackgroundTasks, Depends, Form
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
@@ -18,14 +18,14 @@ from jose import JWTError, jwt
 from typing import Optional
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 # from test import script_db
-from app import script_db
+from new import script_db, sanitize_for_filename
 from azure.servicebus import ServiceBusClient, ServiceBusMessage
 
 # Azure Storage Imports for SAS generation
-from azure.storage.blob import BlobServiceClient, generate_blob_sas, BlobSasPermissions
+from azure.storage.blob import BlobServiceClient, generate_blob_sas, BlobSasPermissions, ContentSettings
 
 # from test import app_graph, projects_collection
-from app import app_graph, projects_collection
+from new import app_graph, projects_collection
 
 from dotenv import load_dotenv
 
@@ -269,6 +269,237 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
 
 
 
+# ── STEP 1: Extract characters only (called before upload step) ──────────────
+@app.post("/api/extract-characters")
+async def extract_characters_endpoint(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Phase 1 of the new two-phase flow.
+    Extracts screenplay text, runs the pipeline up to character extraction,
+    then returns the character names so the frontend can show upload slots.
+    The pipeline is paused (interrupted) before generate_references_node.
+    """
+    screenplay_text = await extract_text_from_file(file)
+    thread_id = str(uuid.uuid4())
+    config = {"configurable": {"thread_id": thread_id}}
+
+    # Log to Cosmos DB
+    projects_collection.insert_one({
+        "thread_id": thread_id,
+        "username": current_user["username"],
+        "status": "extracting_characters",
+        "original_screenplay": screenplay_text
+    })
+
+    # Run the pipeline synchronously up to the interrupt point
+    # The graph must be compiled with interrupt_before=["generate_references"]
+    # in pipeline_graph.py for this to pause correctly.
+    # We run this in a threadpool since app_graph.invoke is blocking.
+    initial_state = {
+        "screenplay_text": screenplay_text,
+        "screenplay_title": None,
+        "numbered_lines": None,
+        "numbered_screenplay_text": None,
+        "scene_boundaries": None,
+        "scenes_raw": None,
+        "character_bible": None,
+        "scene_inventories": None,
+        "planned_scenes": None,
+        "breakdown": None,
+        "reference_images": None,
+        "scene_reference_images": None,
+        "final_output": None,
+        "current_step": "init",
+        "user_uploaded_images": {},
+    }
+
+    try:
+        await run_in_threadpool(app_graph.invoke, initial_state, config)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Character extraction failed: {str(e)}")
+
+    # Read the paused state to get character names
+    state = app_graph.get_state(config)
+    if not state or not state.values:
+        raise HTTPException(status_code=500, detail="Pipeline state not found after extraction.")
+
+    character_bible = state.values.get("character_bible") or {}
+    character_names = list(character_bible.keys())
+
+    # Update Cosmos DB status
+    projects_collection.update_one(
+        {"thread_id": thread_id},
+        {"$set": {"status": "awaiting_character_uploads", "characters": character_names}}
+    )
+
+    return {
+        "thread_id": thread_id,
+        "characters": character_names,
+        "message": f"Found {len(character_names)} characters. Upload references and call /api/resume-pipeline."
+    }
+
+
+# ── STEP 2a: Upload a single character reference image ───────────────────────
+@app.post("/api/upload-character-reference")
+async def upload_character_reference(
+    thread_id: str = Form(...),
+    character_name: str = Form(...),
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Accepts a user-uploaded character reference image.
+    Uploads it to Azure Blob Storage and stores the URL
+    in the pipeline state under user_uploaded_images.
+    Call this once per character the user wants to upload.
+    """
+    # Validate file type
+    allowed_types = {"image/jpeg", "image/png", "image/webp"}
+    if file.content_type not in allowed_types:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported file type: {file.content_type}. Use JPEG, PNG, or WebP."
+        )
+
+    # Read and validate file size (max 10MB)
+    file_bytes = await file.read()
+    if len(file_bytes) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="File too large. Maximum size is 10MB.")
+
+    # Build blob name — sanitize character name for safe path
+    safe_char = character_name.strip().lower()
+    safe_char = "".join(c if c.isalnum() or c in ("-", "_") else "_" for c in safe_char)
+    ext = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else "jpg"
+    blob_name = f"{thread_id}/characters/uploaded_{safe_char}.{ext}"
+
+    # Upload to Azure Blob Storage
+    try:
+        container_client = blob_service_client.get_container_client(BLOB_CONTAINER)
+        blob_client = container_client.get_blob_client(blob_name)
+        blob_client.upload_blob(
+            file_bytes,
+            overwrite=True,
+            content_settings=ContentSettings(content_type=file.content_type),
+        )
+        blob_url = blob_client.url
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Blob upload failed: {str(e)}")
+
+    # Update the pipeline state — merge this upload into user_uploaded_images
+    config = {"configurable": {"thread_id": thread_id}}
+    state = app_graph.get_state(config)
+    if not state or not state.values:
+        raise HTTPException(status_code=404, detail="Pipeline state not found. Run /api/extract-characters first.")
+
+    current_uploads = state.values.get("user_uploaded_images") or {}
+    current_uploads[character_name] = blob_url
+
+    app_graph.update_state(config, {"user_uploaded_images": current_uploads})
+
+    return {
+        "character_name": character_name,
+        "blob_url": blob_url,
+        "thread_id": thread_id,
+        "message": f"Reference uploaded for {character_name}."
+    }
+
+
+# ── STEP 2b: Resume pipeline after uploads ───────────────────────────────────
+class ResumePipelineRequest(BaseModel):
+    thread_id: str
+
+
+
+@app.post("/api/resume-pipeline")
+async def resume_pipeline(
+    req: ResumePipelineRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Phase 2 of the two-phase flow.
+    Called after the user has finished uploading character reference photos
+    (or skipped uploads entirely). Queues the resume job on Service Bus so
+    the heavy LangGraph run happens in a separate worker process — if the
+    API container restarts/scales down, the job is not lost.
+    """
+    config = {"configurable": {"thread_id": req.thread_id}}
+
+    # Verify state exists
+    state = app_graph.get_state(config)
+    if not state or not state.values:
+        raise HTTPException(status_code=404, detail="Pipeline state not found.")
+
+    # Update Cosmos DB status
+    projects_collection.update_one(
+        {"thread_id": req.thread_id},
+        {"$set": {"status": "queued_for_resume"}}
+    )
+
+    # Push a small "resume" message to Service Bus instead of running
+    # the pipeline inline. The worker picks this up and calls
+    # app_graph.invoke(None, config) to continue from the interrupt point.
+    try:
+        with ServiceBusClient.from_connection_string(SERVICE_BUS_CONN_STR) as sb_client:
+            with sb_client.get_queue_sender(queue_name=QUEUE_NAME) as sender:
+                message_payload = {
+                    "action": "resume",
+                    "thread_id": req.thread_id
+                }
+                message = ServiceBusMessage(json.dumps(message_payload))
+                sender.send_messages(message)
+    except Exception as e:
+        projects_collection.update_one(
+            {"thread_id": req.thread_id},
+            {"$set": {"status": "queue_failed"}}
+        )
+        raise HTTPException(status_code=500, detail=f"Failed to queue resume job: {str(e)}")
+
+    return {
+        "thread_id": req.thread_id,
+        "message": "Pipeline resume queued. Poll /api/state/{thread_id} for progress."
+    }
+
+
+
+
+
+# @app.post("/api/resume-pipeline")
+# async def resume_pipeline(
+#     req: ResumePipelineRequest,
+#     background_tasks: BackgroundTasks,
+#     current_user: dict = Depends(get_current_user)
+# ):
+#     """
+#     Phase 2 of the two-phase flow.
+#     Called after the user has finished uploading character reference photos.
+#     Resumes the paused pipeline from generate_references_node onwards.
+#     """
+#     config = {"configurable": {"thread_id": req.thread_id}}
+
+#     # Verify state exists
+#     state = app_graph.get_state(config)
+#     if not state or not state.values:
+#         raise HTTPException(status_code=404, detail="Pipeline state not found.")
+
+#     # Update Cosmos DB status
+#     projects_collection.update_one(
+#         {"thread_id": req.thread_id},
+#         {"$set": {"status": "processing"}}
+#     )
+
+#     # Resume pipeline in background — passes None as input so it
+#     # continues from the interrupted node with the existing state
+#     background_tasks.add_task(run_pipeline_background, None, config)
+
+#     return {
+#         "thread_id": req.thread_id,
+#         "message": "Pipeline resumed. Poll /api/state/{thread_id} for progress."
+#     }
+
+
 
 
 
@@ -277,7 +508,7 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
 
 @app.get("/")
 async def serve_frontend():
-    return FileResponse("static/templates.html")
+    return FileResponse("static/open.html")
 
 
 def run_pipeline_background(initial_state: dict, config: dict):
@@ -294,64 +525,64 @@ def run_pipeline_background(initial_state: dict, config: dict):
 
 
 
-@app.post("/api/start")
-async def start_pipeline(
-    file: UploadFile = File(...),
-    current_user: dict = Depends(get_current_user)
-):
-    screenplay_text = await extract_text_from_file(file)
-    thread_id = str(uuid.uuid4())
-    
-    # 1. Log the job in Cosmos DB
-    projects_collection.insert_one({
-        "thread_id": thread_id,
-        "username": current_user["username"],
-        "status": "queued", # Changed status to queued
-        "original_screenplay": screenplay_text
-    })
-    
-    # 2. Push the job to Azure Service Bus
-    try:
-        with ServiceBusClient.from_connection_string(SERVICE_BUS_CONN_STR) as client:
-            with client.get_queue_sender(queue_name=QUEUE_NAME) as sender:
-                message_payload = {
-                    "thread_id": thread_id,
-                    "screenplay_text": screenplay_text
-                }
-                message = ServiceBusMessage(json.dumps(message_payload))
-                sender.send_messages(message)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to queue job: {str(e)}")
-    
-    return {"thread_id": thread_id, "message": "Pipeline queued successfully"}
-
-
-
-
-
 # @app.post("/api/start")
 # async def start_pipeline(
-#     background_tasks: BackgroundTasks,
 #     file: UploadFile = File(...),
 #     current_user: dict = Depends(get_current_user)
 # ):
-#     # Extract text from uploaded PDF or DOCX
 #     screenplay_text = await extract_text_from_file(file)
-    
 #     thread_id = str(uuid.uuid4())
-#     config = {"configurable": {"thread_id": thread_id}}
     
+#     # 1. Log the job in Cosmos DB
 #     projects_collection.insert_one({
 #         "thread_id": thread_id,
 #         "username": current_user["username"],
-#         "status": "started",
+#         "status": "queued", # Changed status to queued
 #         "original_screenplay": screenplay_text
 #     })
     
-#     initial_state = {"screenplay_text": screenplay_text, "current_step": "init"}
-#     background_tasks.add_task(run_pipeline_background, initial_state, config)
+#     # 2. Push the job to Azure Service Bus
+#     try:
+#         with ServiceBusClient.from_connection_string(SERVICE_BUS_CONN_STR) as client:
+#             with client.get_queue_sender(queue_name=QUEUE_NAME) as sender:
+#                 message_payload = {
+#                     "thread_id": thread_id,
+#                     "screenplay_text": screenplay_text
+#                 }
+#                 message = ServiceBusMessage(json.dumps(message_payload))
+#                 sender.send_messages(message)
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=f"Failed to queue job: {str(e)}")
     
-#     return {"thread_id": thread_id, "message": "Pipeline started in background"}
+#     return {"thread_id": thread_id, "message": "Pipeline queued successfully"}
+
+
+
+
+
+@app.post("/api/start")
+async def start_pipeline(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user)
+):
+    # Extract text from uploaded PDF or DOCX
+    screenplay_text = await extract_text_from_file(file)
+    
+    thread_id = str(uuid.uuid4())
+    config = {"configurable": {"thread_id": thread_id}}
+    
+    projects_collection.insert_one({
+        "thread_id": thread_id,
+        "username": current_user["username"],
+        "status": "started",
+        "original_screenplay": screenplay_text
+    })
+    
+    initial_state = {"screenplay_text": screenplay_text, "current_step": "init"}
+    background_tasks.add_task(run_pipeline_background, initial_state, config)
+    
+    return {"thread_id": thread_id, "message": "Pipeline started in background"}
 
 
 
@@ -502,3 +733,10 @@ async def get_project(thread_id: str):
     project_with_sas = inject_sas_tokens(project)
         
     return project_with_sas
+
+
+
+
+
+
+
