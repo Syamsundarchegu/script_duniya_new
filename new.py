@@ -1864,7 +1864,6 @@ def _call_with_retry_and_rewrite(build_request_fn, raw_prompt: str, label: str, 
 
             if response.status_code in (200, 400):  
                 is_filter, filter_type, filter_reason = _is_content_filter_error(response)  
-
                 
                 if is_filter:  
                     rewrite_attempt += 1  
