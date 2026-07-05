@@ -687,8 +687,17 @@ async def resume_pipeline(
     
 #     return {"thread_id": thread_id, "message": "Pipeline started"}
 
+
+
 @app.get("/api/state/{thread_id}")
 async def get_state(thread_id: str, current_user: dict = Depends(get_current_user)):
+    """
+    Returns the current LangGraph checkpoint state for a pipeline run,
+    plus the Cosmos DB job status so the frontend can distinguish:
+      - still running          -> keep polling
+      - finished (is_finished) -> render storyboard
+      - failed                 -> stop polling, show error toast
+    """
     config = {"configurable": {"thread_id": thread_id}}
     state = app_graph.get_state(config)
 
@@ -701,13 +710,11 @@ async def get_state(thread_id: str, current_user: dict = Depends(get_current_use
     # Inject SAS tokens into all image URLs
     values_with_sas = inject_sas_tokens(safe_values)
 
-    # ── KEY FIX ──
-    # Normalise: if final_output exists but has no 'scenes', pull them from breakdown
+    # ── Normalize final_output: pull scenes from breakdown if missing ──
     final_output = values_with_sas.get("final_output") or {}
-    breakdown    = values_with_sas.get("breakdown") or {}
+    breakdown = values_with_sas.get("breakdown") or {}
 
     if not final_output.get("scenes") and breakdown.get("scenes"):
-        # Build a merged final_output so the frontend always gets one consistent object
         final_output = {
             "screenplay_title": breakdown.get("title") or values_with_sas.get("screenplay_title"),
             "title":            breakdown.get("title") or values_with_sas.get("screenplay_title"),
@@ -720,11 +727,85 @@ async def get_state(thread_id: str, current_user: dict = Depends(get_current_use
         }
         values_with_sas["final_output"] = final_output
 
+    # ── Determine whether the graph itself has finished ──
+    next_nodes = state.next or ()
+    is_finished = len(next_nodes) == 0
+
+    # ── Surface Cosmos job status so the frontend can detect worker failures ──
+    job_status = None
+    error_message = None
+
+    if projects_collection is not None:
+        try:
+            project_doc = projects_collection.find_one(
+                {"thread_id": thread_id},
+                {"status": 1, "error_message": 1},
+            )
+            if project_doc:
+                job_status = project_doc.get("status")
+                error_message = project_doc.get("error_message")
+        except Exception as e:
+            print(f"Failed to read job status from Cosmos for thread_id={thread_id}: {e}")
+            job_status = "unknown"
+            error_message = f"Could not verify job status: {e}"
+
+    # ── Edge case: graph finished but we have no Cosmos record at all ──
+    if job_status is None:
+        if is_finished:
+            job_status = "completed"
+        else:
+            job_status = "processing"
+
     return {
-        "values":      values_with_sas,
-        "next_nodes":  state.next,
-        "is_finished": len(state.next) == 0
+        "values":        values_with_sas,
+        "next_nodes":    next_nodes,
+        "is_finished":   is_finished,
+        "job_status":    job_status,
+        "error_message": error_message,
     }
+
+
+
+
+###################### commented on july 5 ##########################33
+# @app.get("/api/state/{thread_id}")
+# async def get_state(thread_id: str, current_user: dict = Depends(get_current_user)):
+#     config = {"configurable": {"thread_id": thread_id}}
+#     state = app_graph.get_state(config)
+
+#     if not state or not state.values:
+#         raise HTTPException(status_code=404, detail="Thread not found in Checkpointer")
+
+#     # Deep copy to avoid mutating LangGraph's internal state
+#     safe_values = copy.deepcopy(state.values)
+
+#     # Inject SAS tokens into all image URLs
+#     values_with_sas = inject_sas_tokens(safe_values)
+
+#     # ── KEY FIX ──
+#     # Normalise: if final_output exists but has no 'scenes', pull them from breakdown
+#     final_output = values_with_sas.get("final_output") or {}
+#     breakdown    = values_with_sas.get("breakdown") or {}
+
+#     if not final_output.get("scenes") and breakdown.get("scenes"):
+#         # Build a merged final_output so the frontend always gets one consistent object
+#         final_output = {
+#             "screenplay_title": breakdown.get("title") or values_with_sas.get("screenplay_title"),
+#             "title":            breakdown.get("title") or values_with_sas.get("screenplay_title"),
+#             "visual_style":     breakdown.get("visual_style"),
+#             "color_palette":    breakdown.get("color_palette"),
+#             "aspect_ratio":     breakdown.get("aspect_ratio"),
+#             "total_scenes":     breakdown.get("total_scenes"),
+#             "scenes":           breakdown.get("scenes", []),
+#             "reference_images": values_with_sas.get("reference_images", {}),
+#         }
+#         values_with_sas["final_output"] = final_output
+
+#     return {
+#         "values":      values_with_sas,
+#         "next_nodes":  state.next,
+#         "is_finished": len(state.next) == 0
+#     }
 
 # @app.post("/api/resume/{thread_id}")
 # async def resume_pipeline(thread_id: str, updated_state: dict = Body(...)):
