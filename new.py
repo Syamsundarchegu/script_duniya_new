@@ -1256,8 +1256,12 @@ def canonicalize_uploaded_reference(
 
         except requests.exceptions.HTTPError as e:
             status = e.response.status_code if e.response else 0
-            is_filter, filter_type = (
-                _is_content_filter_error(e.response) if e.response else (False, "")
+            # is_filter, filter_type = (
+            #     _is_content_filter_error(e.response) if e.response else (False, "")
+            # )
+
+            is_filter, filter_type, filter_reason = (
+                _is_content_filter_error(e.response) if e.response else (False, "", "")
             )
             if is_filter:
                 rewrite_attempt += 1
@@ -1891,7 +1895,7 @@ def _call_with_retry_and_rewrite(build_request_fn, raw_prompt: str, label: str, 
 
         except requests.exceptions.HTTPError as e:  
             status = e.response.status_code if e.response else 0  
-            is_filter, filter_type,filter_reason = _is_content_filter_error(e.response) if e.response else (False, "")  
+            is_filter, filter_type,filter_reason = _is_content_filter_error(e.response) if e.response else (False, "","")  
             if is_filter:  
                 rewrite_attempt += 1  
                 # log.warning(f"[{label}] Filter error HTTP {status} ({filter_type}), rewrite attempt {rewrite_attempt}")  
