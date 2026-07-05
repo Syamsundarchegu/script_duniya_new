@@ -1596,86 +1596,39 @@
         // ─────────────────────────────────────────
         // POLLING
         // ─────────────────────────────────────────
-        // async function pollState() {
-        //     let headers;
-        //     try { headers = getAuthHeaders(); } catch (e) { return; }
-
-        //     setTimeout(async () => {
-        //         try {
-        //             const res = await fetch(`/api/state/${currentThreadId}`, { headers });
-        //             if (res.status === 401) return logout();
-        //             if (!res.ok && res.status === 404) return pollState();
-
-        //             const state = await res.json();
-        //             const step  = (state.values && state.values.current_step) || 'initializing';
-
-        //             if (step === 'completed' || state.is_finished) {
-        //                 renderStoryboard(state.values);
-        //                 return;
-        //             }
-
-        //             document.getElementById('loading-text').innerText = `PHASE: ${step.replace(/_/g, ' ').toUpperCase()}`;
-
-        //             if (['scenes_split', 'scene_inventories_extracted', 'frames_planned', 'frames_audited_and_repaired'].includes(step)) {
-        //                 updateStepper(3);
-        //             } else if (['character_references_generated', 'scene_references_generated', 'frames_generated'].includes(step)) {
-        //                 updateStepper(4);
-        //             }
-
-        //             pollState();
-        //         } catch (err) {
-        //             console.error('Polling error:', err);
-        //             pollState();
-        //         }
-        //     }, 5000);
-        // }
-
-
-
         async function pollState() {
-    let headers;
-    try { headers = getAuthHeaders(); } catch (e) { return; }
+            let headers;
+            try { headers = getAuthHeaders(); } catch (e) { return; }
 
-    setTimeout(async () => {
-        try {
-            const res = await fetch(`/api/state/${currentThreadId}`, { headers });
-            if (res.status === 401) return logout();
-            if (!res.ok && res.status === 404) return pollState();
+            setTimeout(async () => {
+                try {
+                    const res = await fetch(`/api/state/${currentThreadId}`, { headers });
+                    if (res.status === 401) return logout();
+                    if (!res.ok && res.status === 404) return pollState();
 
-            const state = await res.json();
+                    const state = await res.json();
+                    const step  = (state.values && state.values.current_step) || 'initializing';
 
-            // ── NEW: stop polling and surface worker failures ──
-            if (state.job_status === 'failed') {
-                document.getElementById('loading').classList.add('hidden');
-                showToast(
-                    'Pipeline failed: ' + (state.error_message || 'Unknown error. Check server logs.'),
-                    'error'
-                );
-                return;  // stop polling
-            }
+                    if (step === 'completed' || state.is_finished) {
+                        renderStoryboard(state.values);
+                        return;
+                    }
 
-            const step = (state.values && state.values.current_step) || 'initializing';
+                    document.getElementById('loading-text').innerText = `PHASE: ${step.replace(/_/g, ' ').toUpperCase()}`;
 
-            if (step === 'completed' || state.is_finished) {
-                renderStoryboard(state.values);
-                return;
-            }
+                    if (['scenes_split', 'scene_inventories_extracted', 'frames_planned', 'frames_audited_and_repaired'].includes(step)) {
+                        updateStepper(3);
+                    } else if (['character_references_generated', 'scene_references_generated', 'frames_generated'].includes(step)) {
+                        updateStepper(4);
+                    }
 
-            document.getElementById('loading-text').innerText = `PHASE: ${step.replace(/_/g, ' ').toUpperCase()}`;
-
-            if (['scenes_split', 'scene_inventories_extracted', 'frames_planned', 'frames_audited_and_repaired'].includes(step)) {
-                updateStepper(3);
-            } else if (['character_references_generated', 'scene_references_generated', 'frames_generated'].includes(step)) {
-                updateStepper(4);
-            }
-
-            pollState();
-        } catch (err) {
-            console.error('Polling error:', err);
-            pollState();
+                    pollState();
+                } catch (err) {
+                    console.error('Polling error:', err);
+                    pollState();
+                }
+            }, 5000);
         }
-    }, 5000);
-}
 
         // ─────────────────────────────────────────
         // RENDER STORYBOARD
