@@ -1864,6 +1864,16 @@ def _call_with_retry_and_rewrite(build_request_fn, raw_prompt: str, label: str, 
 
             if response.status_code in (200, 400):  
                 is_filter, filter_type, filter_reason = _is_content_filter_error(response)  
+
+                try:
+                    is_filter, filter_type, filter_reason = _is_content_filter_error(response)
+                except ValueError:
+                    # ఒకవేళ పాత ఫంక్షన్ కేవలం రెండే ఇస్తుంటే దాన్ని క్యాచ్ చేసి హ్యాండిల్ చేయడం
+                    res_tuple = _is_content_filter_error(response)
+                    is_filter = res_tuple[0]
+                    filter_type = res_tuple[1]
+                    filter_reason = ""
+                    
                 if is_filter:  
                     rewrite_attempt += 1  
                     log.warning(f"[{label}] Content filter ({filter_type}) -> rewrite attempt {rewrite_attempt}. Reason: {filter_reason}")
