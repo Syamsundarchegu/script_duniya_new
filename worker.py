@@ -99,6 +99,7 @@
 
 
 import os
+import sys
 import json
 import logging
 from azure.servicebus import ServiceBusClient, AutoLockRenewer
@@ -149,7 +150,7 @@ def main():
     log.info("Worker started. Listening for Service Bus messages...")
     if not SERVICE_BUS_CONN_STR:
         log.error("SERVICE_BUS_CONN_STR environment variable is missing!")
-        return
+        sys.exit(1)
 
     renewer = AutoLockRenewer(max_lock_renewal_duration=MAX_LOCK_DURATION)
     
@@ -165,9 +166,18 @@ def main():
                     receiver.complete_message(msg)
                     log.info("Message fully processed and removed from queue.")
                     
+                    # ఇక్కడ లూప్ ని బ్రేక్ చేయాలి, అప్పుడే కంటైనర్ జాబ్ పూర్తవుతుంది
+                    break
+                    
                 except Exception as e:
                     log.error(f"Failed to process message, abandoning: {e}")
                     receiver.abandon_message(msg)
+                    # ఫెయిల్ అయితే ఎర్రర్ కోడ్ తో జాబ్ ని ఎండ్ చేయాలి
+                    sys.exit(1)
+                    
+    # కనెక్షన్స్ అన్నీ సేఫ్ గా క్లోజ్ అయ్యాక, ప్రోగ్రామ్ ని సక్సెస్ ఫుల్ గా ఎండ్ చేయడం
+    log.info("Exiting worker process successfully.")
+    sys.exit(0)
 
 if __name__ == "__main__":
     main()
